@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Breaking Changes
+
+<!-- List breaking changes here -->
+
 ### Added
 - `#[derive(ArgotCommand)]` proc-macro (feature: `derive`)
 - `Registry::fuzzy_search()` for skim-algorithm fuzzy matching (feature: `fuzzy`)

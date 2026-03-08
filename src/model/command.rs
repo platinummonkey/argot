@@ -67,6 +67,116 @@ pub struct ParsedCommand<'a> {
     pub flags: HashMap<String, String>,
 }
 
+impl<'a> ParsedCommand<'a> {
+    /// Return a positional argument value by name, or `None` if absent.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use argot::{Argument, Command, Parser};
+    /// let cmd = Command::builder("get")
+    ///     .argument(Argument::builder("id").required().build().unwrap())
+    ///     .build().unwrap();
+    /// let cmds = vec![cmd];
+    /// let parsed = Parser::new(&cmds).parse(&["get", "42"]).unwrap();
+    /// assert_eq!(parsed.arg("id"), Some("42"));
+    /// assert_eq!(parsed.arg("missing"), None);
+    /// ```
+    pub fn arg(&self, name: &str) -> Option<&str> {
+        self.args.get(name).map(String::as_str)
+    }
+
+    /// Return a flag value by name, or `None` if absent.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use argot::{Command, Flag, Parser};
+    /// let cmd = Command::builder("run")
+    ///     .flag(Flag::builder("output").takes_value().default_value("text").build().unwrap())
+    ///     .build().unwrap();
+    /// let cmds = vec![cmd];
+    /// let parsed = Parser::new(&cmds).parse(&["run", "--output=json"]).unwrap();
+    /// assert_eq!(parsed.flag("output"), Some("json"));
+    /// ```
+    pub fn flag(&self, name: &str) -> Option<&str> {
+        self.flags.get(name).map(String::as_str)
+    }
+
+    /// Return `true` if a boolean flag is present and set to `"true"`, `false` otherwise.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use argot::{Command, Flag, Parser};
+    /// let cmd = Command::builder("build")
+    ///     .flag(Flag::builder("release").build().unwrap())
+    ///     .build().unwrap();
+    /// let cmds = vec![cmd];
+    /// let parsed = Parser::new(&cmds).parse(&["build", "--release"]).unwrap();
+    /// assert!(parsed.flag_bool("release"));
+    /// assert!(!parsed.flag_bool("missing"));
+    /// ```
+    pub fn flag_bool(&self, name: &str) -> bool {
+        self.flags.get(name).map(|v| v == "true").unwrap_or(false)
+    }
+
+    /// Return the occurrence count for a repeatable boolean flag (stored as a numeric string).
+    /// Returns `0` if the flag was not provided.
+    ///
+    /// For flags stored as `"true"` (non-repeatable), returns `1`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use argot::{Command, Flag, Parser};
+    /// // With a repeatable flag (see Flag::repeatable), -v -v -v → flag_count("verbose") == 3
+    /// // With a normal flag, --verbose → flag_count("verbose") == 1 (stored as "true")
+    /// let cmd = Command::builder("run")
+    ///     .flag(Flag::builder("verbose").short('v').build().unwrap())
+    ///     .build().unwrap();
+    /// let cmds = vec![cmd];
+    /// let parsed = Parser::new(&cmds).parse(&["run", "-v"]).unwrap();
+    /// // Non-repeatable flag stores "true"; flag_count returns 1
+    /// assert_eq!(parsed.flag_count("verbose"), 1);
+    /// assert_eq!(parsed.flag_count("missing"), 0);
+    /// ```
+    pub fn flag_count(&self, name: &str) -> u64 {
+        match self.flags.get(name) {
+            None => 0,
+            Some(v) if v == "true" => 1,
+            Some(v) if v == "false" => 0,
+            Some(v) => v.parse().unwrap_or(0),
+        }
+    }
+
+    /// Return all values for a repeatable value-taking flag as a `Vec<String>`.
+    ///
+    /// - If the flag was provided multiple times (repeatable), the stored JSON array is
+    ///   deserialized into a `Vec`.
+    /// - If the flag was provided once (non-repeatable), returns a single-element `Vec`.
+    /// - If the flag was not provided, returns an empty `Vec`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use argot::{Command, Flag, Parser};
+    /// let cmd = Command::builder("run")
+    ///     .flag(Flag::builder("output").takes_value().default_value("text").build().unwrap())
+    ///     .build().unwrap();
+    /// let cmds = vec![cmd];
+    /// let parsed = Parser::new(&cmds).parse(&["run", "--output=json"]).unwrap();
+    /// assert_eq!(parsed.flag_values("output"), vec!["json"]);
+    /// assert!(parsed.flag_values("missing").is_empty());
+    /// ```
+    pub fn flag_values(&self, name: &str) -> Vec<String> {
+        match self.flags.get(name) {
+            None => vec![],
+            Some(v) => serde_json::from_str::<Vec<String>>(v).unwrap_or_else(|_| vec![v.clone()]),
+        }
+    }
+}
+
 /// A command in the registry, potentially with subcommands.
 ///
 /// Commands are the central unit of argot. Each command has a canonical name,
@@ -147,6 +257,14 @@ pub struct Command {
     /// Skipped during JSON serialization/deserialization.
     #[serde(skip)]
     pub handler: Option<HandlerFn>,
+    /// Arbitrary application-defined metadata.
+    ///
+    /// Use this to attach structured data that is not covered by the built-in
+    /// fields (e.g., permission requirements, category tags, telemetry labels).
+    ///
+    /// Serialized to JSON as an object; absent from output when empty.
+    #[serde(default, skip_serializing_if = "std::collections::HashMap::is_empty")]
+    pub extra: HashMap<String, serde_json::Value>,
 }
 
 impl std::fmt::Debug for Command {
@@ -164,6 +282,7 @@ impl std::fmt::Debug for Command {
             .field("best_practices", &self.best_practices)
             .field("anti_patterns", &self.anti_patterns)
             .field("handler", &self.handler.as_ref().map(|_| "<handler>"))
+            .field("extra", &self.extra)
             .finish()
     }
 }
@@ -181,6 +300,7 @@ impl PartialEq for Command {
             && self.subcommands == other.subcommands
             && self.best_practices == other.best_practices
             && self.anti_patterns == other.anti_patterns
+            && self.extra == other.extra
     }
 }
 
@@ -200,6 +320,15 @@ impl std::hash::Hash for Command {
         self.best_practices.hash(state);
         self.anti_patterns.hash(state);
         // handler is intentionally excluded (not hashable)
+        // extra: hash keys in sorted order, with their JSON string representation
+        {
+            let mut keys: Vec<&String> = self.extra.keys().collect();
+            keys.sort();
+            for k in keys {
+                k.hash(state);
+                self.extra[k].to_string().hash(state);
+            }
+        }
     }
 }
 
@@ -248,6 +377,7 @@ impl Command {
             best_practices: Vec::new(),
             anti_patterns: Vec::new(),
             handler: None,
+            extra: HashMap::new(),
         }
     }
 
@@ -293,6 +423,7 @@ pub struct CommandBuilder {
     best_practices: Vec<String>,
     anti_patterns: Vec<String>,
     handler: Option<HandlerFn>,
+    extra: HashMap<String, serde_json::Value>,
 }
 
 impl CommandBuilder {
@@ -387,6 +518,26 @@ impl CommandBuilder {
         self
     }
 
+    /// Set an arbitrary metadata entry on this command.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use argot::Command;
+    /// # use serde_json::json;
+    /// let cmd = Command::builder("deploy")
+    ///     .meta("category", json!("infrastructure"))
+    ///     .meta("min_role", json!("ops"))
+    ///     .build()
+    ///     .unwrap();
+    ///
+    /// assert_eq!(cmd.extra["category"], json!("infrastructure"));
+    /// ```
+    pub fn meta(mut self, key: impl Into<String>, value: serde_json::Value) -> Self {
+        self.extra.insert(key.into(), value);
+        self
+    }
+
     /// Consume the builder and return a [`Command`].
     ///
     /// # Errors
@@ -476,6 +627,15 @@ impl CommandBuilder {
             }
         }
 
+        // 8. Flags with choices must have a non-empty choices list
+        for flag in &self.flags {
+            if let Some(choices) = &flag.choices {
+                if choices.is_empty() {
+                    return Err(BuildError::EmptyChoices(flag.name.clone()));
+                }
+            }
+        }
+
         Ok(Command {
             canonical: self.canonical,
             aliases: self.aliases,
@@ -489,6 +649,7 @@ impl CommandBuilder {
             best_practices: self.best_practices,
             anti_patterns: self.anti_patterns,
             handler: self.handler,
+            extra: self.extra,
         })
     }
 }
@@ -668,5 +829,24 @@ mod tests {
             .build()
             .unwrap_err();
         assert!(matches!(err, BuildError::VariadicNotLast(_)));
+    }
+
+    #[test]
+    fn test_meta_field_serde() {
+        let cmd = Command::builder("x")
+            .meta("role", serde_json::json!("admin"))
+            .build()
+            .unwrap();
+        let json = serde_json::to_string(&cmd).unwrap();
+        assert!(json.contains("admin"));
+        let de: Command = serde_json::from_str(&json).unwrap();
+        assert_eq!(de.extra["role"], serde_json::json!("admin"));
+    }
+
+    #[test]
+    fn test_meta_empty_not_serialized() {
+        let cmd = Command::builder("x").build().unwrap();
+        let json = serde_json::to_string(&cmd).unwrap();
+        assert!(!json.contains("extra"));
     }
 }

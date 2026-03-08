@@ -104,4 +104,8 @@ pub enum BuildError {
     /// A variadic argument is not the last argument defined.
     #[error("variadic argument `{0}` must be the last argument")]
     VariadicNotLast(String),
+
+    /// A flag's `choices` list is empty, which would reject all values.
+    #[error("flag `{0}` has an empty choices list")]
+    EmptyChoices(String),
 }

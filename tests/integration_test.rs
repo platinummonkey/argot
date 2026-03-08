@@ -236,3 +236,70 @@ fn test_full_pipeline() {
     let md = render_markdown(parsed.command);
     assert!(md.starts_with("# list"));
 }
+
+#[test]
+fn test_serde_round_trip_with_subcommands() {
+    let r = build_registry(); // uses the existing helper
+    let json = r.to_json().unwrap();
+
+    // Re-parse the JSON into a Vec<Command>
+    let commands: Vec<argot::Command> = serde_json::from_str(&json).unwrap();
+
+    // Verify structure survived round-trip
+    let remote = commands
+        .iter()
+        .find(|c| c.canonical == "remote")
+        .expect("remote not found");
+    assert!(
+        !remote.subcommands.is_empty(),
+        "subcommands should survive serde"
+    );
+
+    let add_sub = remote.subcommands.iter().find(|c| c.canonical == "add");
+    assert!(
+        add_sub.is_some(),
+        "remote.add subcommand should survive serde"
+    );
+
+    // Handlers are skipped — verify they are None after deserialization
+    let run = commands
+        .iter()
+        .find(|c| c.canonical == "run")
+        .expect("run not found");
+    assert!(
+        run.handler.is_none(),
+        "handler must be None after deserialization"
+    );
+
+    // Re-build a registry from the deserialized commands and verify parsing still works
+    let new_registry = argot::Registry::new(commands);
+    let parser = argot::Parser::new(new_registry.commands());
+    let parsed = parser.parse(&["list"]).unwrap();
+    assert_eq!(parsed.command.canonical, "list");
+}
+
+#[test]
+fn test_command_named_help_parses_correctly() {
+    // A user-defined "help" command should be parseable; it only conflicts
+    // with Cli's --help flag, not with direct Parser use.
+    let help_cmd = argot::Command::builder("help")
+        .summary("Show help information")
+        .build()
+        .unwrap();
+    let registry = argot::Registry::new(vec![help_cmd]);
+    let parser = argot::Parser::new(registry.commands());
+    let parsed = parser.parse(&["help"]).unwrap();
+    assert_eq!(parsed.command.canonical, "help");
+}
+
+#[test]
+fn test_command_named_version_parses_correctly() {
+    let version_cmd = argot::Command::builder("version")
+        .summary("Print version information")
+        .build()
+        .unwrap();
+    let registry = argot::Registry::new(vec![version_cmd]);
+    let parser = argot::Parser::new(registry.commands());
+    let parsed = parser.parse(&["version"]).unwrap();
+    assert_eq!(parsed.command.canonical, "version");
+}

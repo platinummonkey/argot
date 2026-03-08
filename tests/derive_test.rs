@@ -79,4 +79,56 @@ mod tests {
         let cmd = SomeOtherCommand::command();
         assert_eq!(cmd.canonical, "explicit-name");
     }
+
+    #[test]
+    fn test_derive_command_parses_via_parser() {
+        use argot::{Parser, Registry};
+
+        // Build registry from derived command
+        let cmd = Deploy::command();
+        let registry = Registry::new(vec![cmd]);
+        let parser = Parser::new(registry.commands());
+
+        // Parse a real argv slice
+        let parsed = parser.parse(&["deploy", "production"]).unwrap();
+        assert_eq!(parsed.command.canonical, "deploy");
+        assert_eq!(parsed.args["env"], "production");
+        assert_eq!(
+            parsed.flags.get("dry-run").map(|s| s.as_str()),
+            None, // not provided
+        );
+    }
+
+    #[test]
+    fn test_derive_command_flag_parsing() {
+        use argot::{Parser, Registry};
+
+        let cmd = Deploy::command();
+        let registry = Registry::new(vec![cmd]);
+        let parser = Parser::new(registry.commands());
+
+        let parsed = parser
+            .parse(&["deploy", "staging", "--dry-run", "--output=json"])
+            .unwrap();
+        assert_eq!(parsed.args["env"], "staging");
+        assert_eq!(parsed.flags["dry-run"], "true");
+        assert_eq!(parsed.flags["output"], "json");
+    }
+
+    #[test]
+    fn test_derive_missing_required_argument() {
+        use argot::{ParseError, Parser, Registry};
+
+        let cmd = Deploy::command();
+        let registry = Registry::new(vec![cmd]);
+        let parser = Parser::new(registry.commands());
+
+        // "env" is required — missing should error
+        let result = parser.parse(&["deploy"]);
+        assert!(
+            matches!(result, Err(ParseError::MissingArgument(ref s)) if s == "env"),
+            "expected MissingArgument(env), got {:?}",
+            result
+        );
+    }
 }

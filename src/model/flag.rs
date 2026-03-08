@@ -40,6 +40,16 @@ pub struct Flag {
     pub takes_value: bool,
     /// Value substituted when the flag is not provided (optional flags only).
     pub default: Option<String>,
+    /// If set, the flag value must be one of these strings (case-sensitive).
+    /// Only meaningful when `takes_value` is true.
+    pub choices: Option<Vec<String>>,
+    /// If true, this flag may appear multiple times in an invocation.
+    ///
+    /// For boolean flags: occurrences are counted; stored as a numeric string
+    /// (e.g., `-v -v -v` → `"3"`).
+    /// For value-taking flags: values are collected into a JSON array string
+    /// (e.g., `--tag a --tag b` → `["a","b"]`).
+    pub repeatable: bool,
 }
 
 /// Consuming builder for [`Flag`].
@@ -68,6 +78,8 @@ pub struct FlagBuilder {
     required: bool,
     takes_value: bool,
     default: Option<String>,
+    choices: Option<Vec<String>>,
+    repeatable: bool,
 }
 
 impl Flag {
@@ -93,6 +105,8 @@ impl Flag {
             required: false,
             takes_value: false,
             default: None,
+            choices: None,
+            repeatable: false,
         }
     }
 }
@@ -139,6 +153,46 @@ impl FlagBuilder {
         self
     }
 
+    /// Restrict this flag's value to one of the given choices.
+    ///
+    /// Only meaningful for value-taking flags (`takes_value()`).
+    /// The parser returns [`crate::ParseError::InvalidChoice`] if the provided
+    /// value is not in the list.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use argot::Flag;
+    /// let flag = Flag::builder("format")
+    ///     .takes_value()
+    ///     .choices(["json", "yaml", "text"])
+    ///     .build()
+    ///     .unwrap();
+    /// let expected: Vec<String> = vec!["json".into(), "yaml".into(), "text".into()];
+    /// assert_eq!(flag.choices.as_deref(), Some(expected.as_slice()));
+    /// ```
+    pub fn choices(mut self, choices: impl IntoIterator<Item = impl Into<String>>) -> Self {
+        self.choices = Some(choices.into_iter().map(Into::into).collect());
+        self
+    }
+
+    /// Allow this flag to be specified more than once.
+    ///
+    /// For boolean flags: occurrences are counted and stored as a numeric string.
+    /// For value-taking flags: values are collected into a JSON array string.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use argot::Flag;
+    /// let flag = Flag::builder("verbose").repeatable().build().unwrap();
+    /// assert!(flag.repeatable);
+    /// ```
+    pub fn repeatable(mut self) -> Self {
+        self.repeatable = true;
+        self
+    }
+
     /// Consume the builder and return a [`Flag`].
     ///
     /// # Errors
@@ -164,6 +218,8 @@ impl FlagBuilder {
             required: self.required,
             takes_value: self.takes_value,
             default: self.default,
+            choices: self.choices,
+            repeatable: self.repeatable,
         })
     }
 }

@@ -388,4 +388,48 @@ mod tests {
             result
         );
     }
+
+    #[test]
+    fn test_run_handler_error_wrapped() {
+        use std::sync::Arc;
+        let cmd = crate::model::Command::builder("fail")
+            .handler(Arc::new(|_| {
+                Err(Box::<dyn std::error::Error>::from("something went wrong"))
+            }))
+            .build()
+            .unwrap();
+        let cli = super::Cli::new(vec![cmd]);
+        let result = cli.run(["fail"]);
+        assert!(result.is_err());
+        match result {
+            Err(super::CliError::Handler(e)) => {
+                assert!(e.to_string().contains("something went wrong"));
+            }
+            other => panic!("expected CliError::Handler, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_run_command_named_help_dispatches_correctly() {
+        // A command named "help" passed through Cli should be dispatched,
+        // not intercepted as a built-in --help flag.
+        // This verifies Cli only intercepts "--help" flag, not the word "help".
+        use std::sync::atomic::{AtomicBool, Ordering};
+        use std::sync::Arc;
+        let called = Arc::new(AtomicBool::new(false));
+        let called2 = called.clone();
+        let cmd = crate::model::Command::builder("help")
+            .handler(Arc::new(move |_| {
+                called2.store(true, Ordering::SeqCst);
+                Ok(())
+            }))
+            .build()
+            .unwrap();
+        let cli = super::Cli::new(vec![cmd]);
+        cli.run(["help"]).unwrap();
+        assert!(
+            called.load(Ordering::SeqCst),
+            "handler should have been called"
+        );
+    }
 }

@@ -407,6 +407,10 @@ mod tests {
     fn run_server(input: &str) -> String {
         let registry = make_registry();
         let server = McpServer::new(registry);
+        run_server_with(&server, input)
+    }
+
+    fn run_server_with(server: &McpServer, input: &str) -> String {
         let reader = Cursor::new(input.as_bytes().to_vec());
         let mut output = Vec::new();
         server.serve(reader, &mut output).unwrap();
@@ -560,6 +564,45 @@ mod tests {
         let resp: Value = serde_json::from_str(lines[0]).unwrap();
         assert_eq!(resp["id"], 5);
         assert_eq!(resp["error"]["code"], -32601);
+    }
+
+    #[test]
+    fn test_tools_list_three_level_nesting() {
+        use serde_json::Value;
+        // Build a 3-level tree: service → deployment → blue-green
+        let leaf = crate::model::Command::builder("blue-green")
+            .summary("Blue-green deployment strategy")
+            .build()
+            .unwrap();
+        let mid = crate::model::Command::builder("deployment")
+            .summary("Deployment operations")
+            .subcommand(leaf)
+            .build()
+            .unwrap();
+        let top = crate::model::Command::builder("service")
+            .summary("Service management")
+            .subcommand(mid)
+            .build()
+            .unwrap();
+        let registry = crate::query::Registry::new(vec![top]);
+        let server = McpServer::new(registry);
+
+        let input = concat!(
+            r#"{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}"#,
+            "\n"
+        );
+        let output = run_server_with(&server, input);
+        let line = output.lines().next().unwrap();
+        let resp: Value = serde_json::from_str(line).unwrap();
+        let tools = resp["result"]["tools"].as_array().unwrap();
+        let tool_names: Vec<&str> = tools.iter().map(|t| t["name"].as_str().unwrap()).collect();
+
+        assert!(tool_names.contains(&"service"), "top-level");
+        assert!(tool_names.contains(&"service-deployment"), "2nd level");
+        assert!(
+            tool_names.contains(&"service-deployment-blue-green"),
+            "3rd level"
+        );
     }
 
     #[test]

@@ -110,6 +110,16 @@ pub enum ParseError {
         /// The unrecognised token as supplied by the caller.
         got: String,
     },
+    /// A flag value was provided that is not in the flag's allowed choices.
+    #[error("invalid value `{value}` for `--{flag}`: expected one of {choices:?}")]
+    InvalidChoice {
+        /// The flag's long name.
+        flag: String,
+        /// The invalid value that was supplied.
+        value: String,
+        /// The allowed values.
+        choices: Vec<String>,
+    },
 }
 
 /// Parses raw argument slices against a slice of registered [`Command`]s.
@@ -301,7 +311,42 @@ impl<'a> Parser<'a> {
                         "true".to_string()
                     };
 
-                    flags.insert(flag_def.name.clone(), val);
+                    // Validate choice constraint
+                    if let Some(choices) = &flag_def.choices {
+                        if !choices.contains(&val) {
+                            return Err(ParseError::InvalidChoice {
+                                flag: flag_def.name.clone(),
+                                value: val,
+                                choices: choices.clone(),
+                            });
+                        }
+                    }
+
+                    // Repeatable flag accumulation
+                    if flag_def.repeatable {
+                        if flag_def.takes_value {
+                            // Accumulate into JSON array
+                            let new_val = match flags.get(&flag_def.name) {
+                                None => serde_json::to_string(&[&val]).unwrap(),
+                                Some(existing) => {
+                                    let mut arr: Vec<String> = serde_json::from_str(existing)
+                                        .unwrap_or_else(|_| vec![existing.clone()]);
+                                    arr.push(val);
+                                    serde_json::to_string(&arr).unwrap()
+                                }
+                            };
+                            flags.insert(flag_def.name.clone(), new_val);
+                        } else {
+                            // Count occurrences
+                            let count = flags
+                                .get(&flag_def.name)
+                                .and_then(|v| v.parse::<u64>().ok())
+                                .unwrap_or(0);
+                            flags.insert(flag_def.name.clone(), (count + 1).to_string());
+                        }
+                    } else {
+                        flags.insert(flag_def.name.clone(), val);
+                    }
                 }
                 Token::ShortFlag { name: c, value } => {
                     let flag_def = cmd
@@ -323,10 +368,44 @@ impl<'a> Parser<'a> {
                                 }
                             }
                         };
-                        flags.insert(flag_def.name.clone(), val);
+
+                        // Validate choice constraint
+                        if let Some(choices) = &flag_def.choices {
+                            if !choices.contains(&val) {
+                                return Err(ParseError::InvalidChoice {
+                                    flag: flag_def.name.clone(),
+                                    value: val,
+                                    choices: choices.clone(),
+                                });
+                            }
+                        }
+
+                        // Repeatable flag accumulation
+                        if flag_def.repeatable {
+                            let new_val = match flags.get(&flag_def.name) {
+                                None => serde_json::to_string(&[&val]).unwrap(),
+                                Some(existing) => {
+                                    let mut arr: Vec<String> = serde_json::from_str(existing)
+                                        .unwrap_or_else(|_| vec![existing.clone()]);
+                                    arr.push(val);
+                                    serde_json::to_string(&arr).unwrap()
+                                }
+                            };
+                            flags.insert(flag_def.name.clone(), new_val);
+                        } else {
+                            flags.insert(flag_def.name.clone(), val);
+                        }
                     } else {
-                        // Boolean flag: register as true and expand remaining chars.
-                        flags.insert(flag_def.name.clone(), "true".to_string());
+                        // Boolean flag: register as true (or count if repeatable) and expand remaining chars.
+                        if flag_def.repeatable {
+                            let count = flags
+                                .get(&flag_def.name)
+                                .and_then(|v| v.parse::<u64>().ok())
+                                .unwrap_or(0);
+                            flags.insert(flag_def.name.clone(), (count + 1).to_string());
+                        } else {
+                            flags.insert(flag_def.name.clone(), "true".to_string());
+                        }
                         if let Some(rest) = value {
                             if !rest.is_empty() {
                                 let mut chars = rest.chars();
@@ -931,5 +1010,147 @@ mod tests {
         assert!(result.is_ok(), "expected Ok, got {:?}", result);
         let parsed = result.unwrap();
         assert_eq!(parsed.args.get("files").map(String::as_str), Some("[]"));
+    }
+
+    // -----------------------------------------------------------------------
+    // Flag choices and repeatable
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_flag_choices_valid() {
+        let cmds = vec![Command::builder("build")
+            .flag(
+                Flag::builder("format")
+                    .takes_value()
+                    .choices(["json", "yaml", "text"])
+                    .build()
+                    .unwrap(),
+            )
+            .build()
+            .unwrap()];
+        let parser = Parser::new(&cmds);
+        let parsed = parser.parse(&["build", "--format=json"]).unwrap();
+        assert_eq!(parsed.flags["format"], "json");
+    }
+
+    #[test]
+    fn test_flag_choices_invalid() {
+        let cmds = vec![Command::builder("build")
+            .flag(
+                Flag::builder("format")
+                    .takes_value()
+                    .choices(["json", "yaml", "text"])
+                    .build()
+                    .unwrap(),
+            )
+            .build()
+            .unwrap()];
+        let parser = Parser::new(&cmds);
+        let result = parser.parse(&["build", "--format=xml"]);
+        assert!(
+            matches!(result, Err(ParseError::InvalidChoice { ref value, .. }) if value == "xml")
+        );
+    }
+
+    #[test]
+    fn test_repeatable_boolean_flag() {
+        let cmds = vec![Command::builder("run")
+            .flag(
+                Flag::builder("verbose")
+                    .short('v')
+                    .repeatable()
+                    .build()
+                    .unwrap(),
+            )
+            .build()
+            .unwrap()];
+        let parser = Parser::new(&cmds);
+        // Three separate -v flags
+        let parsed = parser.parse(&["run", "-v", "-v", "-v"]).unwrap();
+        assert_eq!(parsed.flags["verbose"], "3");
+    }
+
+    #[test]
+    fn test_repeatable_value_flag() {
+        let cmds = vec![Command::builder("run")
+            .flag(
+                Flag::builder("tag")
+                    .takes_value()
+                    .repeatable()
+                    .build()
+                    .unwrap(),
+            )
+            .build()
+            .unwrap()];
+        let parser = Parser::new(&cmds);
+        let parsed = parser.parse(&["run", "--tag=alpha", "--tag=beta"]).unwrap();
+        let tags: Vec<String> = serde_json::from_str(&parsed.flags["tag"]).unwrap();
+        assert_eq!(tags, vec!["alpha", "beta"]);
+    }
+
+    #[test]
+    fn test_adjacent_short_repeatable() {
+        // -vvv should expand to three -v flags and count correctly
+        let cmds = vec![Command::builder("run")
+            .flag(
+                Flag::builder("verbose")
+                    .short('v')
+                    .repeatable()
+                    .build()
+                    .unwrap(),
+            )
+            .build()
+            .unwrap()];
+        let parser = Parser::new(&cmds);
+        let parsed = parser.parse(&["run", "-vvv"]).unwrap();
+        assert_eq!(parsed.flags["verbose"], "3");
+    }
+
+    #[test]
+    fn test_empty_choices_build_error() {
+        use crate::model::BuildError;
+        let flag = Flag::builder("format")
+            .takes_value()
+            .choices(Vec::<String>::new())
+            .build()
+            .unwrap();
+        let result = Command::builder("cmd").flag(flag).build();
+        assert!(matches!(result, Err(BuildError::EmptyChoices(_))));
+    }
+}
+
+#[cfg(test)]
+mod typed_getter_tests {
+    use super::*;
+    use crate::model::{Argument, Command, Flag};
+
+    #[test]
+    fn test_parsed_command_typed_getters() {
+        let cmd = Command::builder("run")
+            .argument(Argument::builder("script").required().build().unwrap())
+            .flag(Flag::builder("verbose").short('v').build().unwrap())
+            .flag(
+                Flag::builder("output")
+                    .takes_value()
+                    .default_value("text")
+                    .build()
+                    .unwrap(),
+            )
+            .build()
+            .unwrap();
+        let cmds = vec![cmd];
+        let parser = Parser::new(&cmds);
+        let parsed = parser.parse(&["run", "myscript", "-v"]).unwrap();
+
+        assert_eq!(parsed.arg("script"), Some("myscript"));
+        assert_eq!(parsed.arg("missing"), None);
+        assert_eq!(parsed.flag("verbose"), Some("true"));
+        assert_eq!(parsed.flag("output"), Some("text")); // default
+        assert!(parsed.flag_bool("verbose"));
+        assert!(!parsed.flag_bool("output")); // not a boolean flag
+        assert_eq!(parsed.flag_count("verbose"), 1);
+        assert_eq!(parsed.flag_count("missing"), 0);
+        assert_eq!(parsed.flag_values("output"), vec!["text"]);
+        assert!(parsed.flag_values("missing").is_empty());
     }
 }

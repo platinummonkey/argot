@@ -1,10 +1,10 @@
 [package]
 name = "argot-derive"
-version = "0.1.0"
+version.workspace = true
 edition = "2021"
 description = "Derive macros for the argot command framework"
-license = "MIT"
-repository = "https://github.com/platinummonkey/argot"
+license.workspace = true
+repository.workspace = true
 
 [lib]
 proc-macro = true

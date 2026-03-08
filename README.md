@@ -142,6 +142,20 @@ fn main() {
 
 ---
 
+# Feature Flags
+
+| Feature  | Description | Default |
+|----------|-------------|---------|
+| `derive` | `#[derive(ArgotCommand)]` proc-macro | no |
+| `fuzzy`  | `Registry::fuzzy_search()` via `fuzzy-matcher` | no |
+| `mcp`    | `McpServer` stdio transport (Model Context Protocol) | no |
+
+# MSRV
+
+Minimum Supported Rust Version: **1.75.0**
+
+---
+
 # Optional: MCP Transport
 
 Argot can optionally expose commands via MCP without affecting core packages:
