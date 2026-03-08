@@ -1,3 +1,5 @@
+use fuzzy_matcher::skim::SkimMatcherV2;
+use fuzzy_matcher::FuzzyMatcher;
 use thiserror::Error;
 
 use crate::model::{Command, Example};
@@ -32,7 +34,7 @@ impl Registry {
         self.commands.iter().find(|c| c.canonical == canonical)
     }
 
-    /// Walk a dot-separated path of canonical names.
+    /// Walk a path of canonical names into the subcommand tree.
     /// `path = &["remote", "add"]` returns the `add` subcommand of `remote`.
     pub fn get_subcommand(&self, path: &[&str]) -> Option<&Command> {
         if path.is_empty() {
@@ -63,6 +65,22 @@ impl Registry {
                     || c.description.to_lowercase().contains(&q)
             })
             .collect()
+    }
+
+    /// Fuzzy search across canonical name, summary, and description.
+    /// Returns matches sorted descending by score (best match first).
+    pub fn fuzzy_search(&self, query: &str) -> Vec<(&Command, i64)> {
+        let matcher = SkimMatcherV2::default();
+        let mut results: Vec<(&Command, i64)> = self
+            .commands
+            .iter()
+            .filter_map(|cmd| {
+                let text = format!("{} {} {}", cmd.canonical, cmd.summary, cmd.description);
+                matcher.fuzzy_match(&text, query).map(|score| (cmd, score))
+            })
+            .collect();
+        results.sort_by(|a, b| b.1.cmp(&a.1));
+        results
     }
 
     pub fn to_json(&self) -> Result<String, QueryError> {
@@ -138,12 +156,44 @@ mod tests {
     }
 
     #[test]
+    fn test_fuzzy_search_match() {
+        let r = registry();
+        let results = r.fuzzy_search("lst");
+        assert!(!results.is_empty());
+        assert!(results.iter().any(|(cmd, _)| cmd.canonical == "list"));
+    }
+
+    #[test]
+    fn test_fuzzy_search_no_match() {
+        let r = registry();
+        assert!(r.fuzzy_search("zzzzz").is_empty());
+    }
+
+    #[test]
+    fn test_fuzzy_search_sorted_by_score() {
+        let exact = Command::builder("list")
+            .summary("List all items")
+            .build()
+            .unwrap();
+        let weak = Command::builder("remote")
+            .summary("Manage remotes")
+            .build()
+            .unwrap();
+        let r = Registry::new(vec![weak, exact]);
+        let results = r.fuzzy_search("list");
+        assert!(!results.is_empty());
+        assert_eq!(results[0].0.canonical, "list");
+        for window in results.windows(2) {
+            assert!(window[0].1 >= window[1].1);
+        }
+    }
+
+    #[test]
     fn test_to_json() {
         let r = registry();
         let json = r.to_json().unwrap();
         assert!(json.contains("remote"));
         assert!(json.contains("list"));
-        // Re-parse to verify valid JSON
         let _: serde_json::Value = serde_json::from_str(&json).unwrap();
     }
 }

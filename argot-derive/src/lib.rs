@@ -1,0 +1,311 @@
+use proc_macro::TokenStream;
+use proc_macro2::TokenStream as TokenStream2;
+use quote::quote;
+use syn::{parse_macro_input, Data, DeriveInput, Fields, LitChar, LitStr};
+
+/// Derive macro for the `ArgotCommand` trait.
+///
+/// Annotate a struct with `#[derive(ArgotCommand)]` to automatically implement
+/// `ArgotCommand::command()` using `#[argot(...)]` attributes.
+///
+/// ## Struct-level attributes (`#[argot(...)]`)
+///
+/// - `canonical = "name"` — override the canonical command name (default: struct name → kebab-case)
+/// - `summary = "text"` — one-line summary
+/// - `description = "text"` — long description
+/// - `alias = "a"` — add an alias (repeatable via multiple `#[argot(...)]` attrs or commas)
+/// - `best_practice = "text"` — add a best practice
+/// - `anti_pattern = "text"` — add an anti-pattern
+///
+/// ## Field-level attributes (`#[argot(...)]`)
+///
+/// Fields without `#[argot(...)]` are skipped entirely.
+///
+/// - `positional` — treat as a positional [`Argument`]
+/// - `flag` — treat as a named [`Flag`]
+/// - `required` — mark as required
+/// - `short = 'c'` — short flag character
+/// - `takes_value` — flag consumes the next token as its value
+/// - `description = "text"` — field description
+/// - `default = "value"` — default value
+#[proc_macro_derive(ArgotCommand, attributes(argot))]
+pub fn derive_argot_command(input: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(input as DeriveInput);
+    derive_impl(input)
+        .unwrap_or_else(|e| e.into_compile_error())
+        .into()
+}
+
+// ---------------------------------------------------------------------------
+// Attribute data structures
+// ---------------------------------------------------------------------------
+
+#[derive(Default)]
+struct StructAttrs {
+    canonical: Option<String>,
+    summary: Option<String>,
+    description: Option<String>,
+    aliases: Vec<String>,
+    best_practices: Vec<String>,
+    anti_patterns: Vec<String>,
+}
+
+#[derive(Default)]
+struct FieldAttrs {
+    positional: bool,
+    flag: bool,
+    required: bool,
+    short: Option<char>,
+    takes_value: bool,
+    description: Option<String>,
+    default: Option<String>,
+}
+
+// ---------------------------------------------------------------------------
+// Attribute parsers
+// ---------------------------------------------------------------------------
+
+fn parse_struct_attrs(attrs: &[syn::Attribute]) -> syn::Result<StructAttrs> {
+    let mut out = StructAttrs::default();
+    for attr in attrs {
+        if !attr.path().is_ident("argot") {
+            continue;
+        }
+        attr.parse_nested_meta(|meta| {
+            if meta.path.is_ident("canonical") {
+                let val: LitStr = meta.value()?.parse()?;
+                out.canonical = Some(val.value());
+            } else if meta.path.is_ident("summary") {
+                let val: LitStr = meta.value()?.parse()?;
+                out.summary = Some(val.value());
+            } else if meta.path.is_ident("description") {
+                let val: LitStr = meta.value()?.parse()?;
+                out.description = Some(val.value());
+            } else if meta.path.is_ident("alias") {
+                let val: LitStr = meta.value()?.parse()?;
+                out.aliases.push(val.value());
+            } else if meta.path.is_ident("best_practice") {
+                let val: LitStr = meta.value()?.parse()?;
+                out.best_practices.push(val.value());
+            } else if meta.path.is_ident("anti_pattern") {
+                let val: LitStr = meta.value()?.parse()?;
+                out.anti_patterns.push(val.value());
+            } else {
+                return Err(meta.error(format!(
+                    "unknown argot struct attribute `{}`",
+                    meta.path
+                        .get_ident()
+                        .map(|i| i.to_string())
+                        .unwrap_or_default()
+                )));
+            }
+            Ok(())
+        })?;
+    }
+    Ok(out)
+}
+
+fn parse_field_attrs(attrs: &[syn::Attribute]) -> syn::Result<Option<FieldAttrs>> {
+    let mut found = false;
+    let mut out = FieldAttrs::default();
+    for attr in attrs {
+        if !attr.path().is_ident("argot") {
+            continue;
+        }
+        found = true;
+        attr.parse_nested_meta(|meta| {
+            if meta.path.is_ident("positional") {
+                out.positional = true;
+            } else if meta.path.is_ident("flag") {
+                out.flag = true;
+            } else if meta.path.is_ident("required") {
+                out.required = true;
+            } else if meta.path.is_ident("takes_value") {
+                out.takes_value = true;
+            } else if meta.path.is_ident("short") {
+                let val: LitChar = meta.value()?.parse()?;
+                out.short = Some(val.value());
+            } else if meta.path.is_ident("description") {
+                let val: LitStr = meta.value()?.parse()?;
+                out.description = Some(val.value());
+            } else if meta.path.is_ident("default") {
+                let val: LitStr = meta.value()?.parse()?;
+                out.default = Some(val.value());
+            } else {
+                return Err(meta.error(format!(
+                    "unknown argot field attribute `{}`",
+                    meta.path
+                        .get_ident()
+                        .map(|i| i.to_string())
+                        .unwrap_or_default()
+                )));
+            }
+            Ok(())
+        })?;
+    }
+    if found { Ok(Some(out)) } else { Ok(None) }
+}
+
+// ---------------------------------------------------------------------------
+// Name conversion helpers
+// ---------------------------------------------------------------------------
+
+/// Convert `CamelCase` → `kebab-case`.
+///
+/// Inserts `-` before each uppercase letter that follows a lowercase letter,
+/// then lowercases everything.
+fn camel_to_kebab(name: &str) -> String {
+    let mut out = String::with_capacity(name.len() + 4);
+    let chars: Vec<char> = name.chars().collect();
+    for (i, &c) in chars.iter().enumerate() {
+        if c.is_uppercase() && i > 0 && chars[i - 1].is_lowercase() {
+            out.push('-');
+        }
+        out.push(c.to_ascii_lowercase());
+    }
+    out
+}
+
+/// Convert a Rust field name (`snake_case`) to a CLI name (`kebab-case`).
+fn snake_to_kebab(name: &str) -> String {
+    name.replace('_', "-")
+}
+
+// ---------------------------------------------------------------------------
+// Core derive implementation
+// ---------------------------------------------------------------------------
+
+fn derive_impl(input: DeriveInput) -> syn::Result<TokenStream2> {
+    let fields = match &input.data {
+        Data::Struct(s) => &s.fields,
+        _ => {
+            return Err(syn::Error::new_spanned(
+                &input.ident,
+                "ArgotCommand can only be derived for structs",
+            ));
+        }
+    };
+
+    let named = match fields {
+        Fields::Named(n) => &n.named,
+        Fields::Unit => &syn::punctuated::Punctuated::new(),
+        Fields::Unnamed(_) => {
+            return Err(syn::Error::new_spanned(
+                &input.ident,
+                "ArgotCommand does not support tuple structs; use named fields",
+            ));
+        }
+    };
+
+    let struct_attrs = parse_struct_attrs(&input.attrs)?;
+
+    let canonical = struct_attrs
+        .canonical
+        .clone()
+        .unwrap_or_else(|| camel_to_kebab(&input.ident.to_string()));
+
+    let mut builder_tokens = quote! {
+        ::argot::Command::builder(#canonical)
+    };
+
+    if let Some(ref s) = struct_attrs.summary {
+        builder_tokens = quote! { #builder_tokens .summary(#s) };
+    }
+    if let Some(ref d) = struct_attrs.description {
+        builder_tokens = quote! { #builder_tokens .description(#d) };
+    }
+    for alias in &struct_attrs.aliases {
+        builder_tokens = quote! { #builder_tokens .alias(#alias) };
+    }
+    for bp in &struct_attrs.best_practices {
+        builder_tokens = quote! { #builder_tokens .best_practice(#bp) };
+    }
+    for ap in &struct_attrs.anti_patterns {
+        builder_tokens = quote! { #builder_tokens .anti_pattern(#ap) };
+    }
+
+    for field in named.iter() {
+        let field_ident = field.ident.as_ref().expect("named field has ident");
+        let fa = match parse_field_attrs(&field.attrs)? {
+            None => continue,
+            Some(fa) => fa,
+        };
+
+        if fa.positional {
+            let arg_name = snake_to_kebab(&field_ident.to_string());
+            let mut arg_builder = quote! { ::argot::Argument::builder(#arg_name) };
+            if fa.required {
+                arg_builder = quote! { #arg_builder .required() };
+            }
+            if let Some(ref desc) = fa.description {
+                arg_builder = quote! { #arg_builder .description(#desc) };
+            }
+            if let Some(ref def) = fa.default {
+                arg_builder = quote! { #arg_builder .default_value(#def) };
+            }
+            builder_tokens = quote! { #builder_tokens .argument(#arg_builder .build().unwrap()) };
+        } else if fa.flag {
+            let flag_name = snake_to_kebab(&field_ident.to_string());
+            let mut flag_builder = quote! { ::argot::Flag::builder(#flag_name) };
+            if let Some(c) = fa.short {
+                flag_builder = quote! { #flag_builder .short(#c) };
+            }
+            if fa.required {
+                flag_builder = quote! { #flag_builder .required() };
+            }
+            if fa.takes_value {
+                flag_builder = quote! { #flag_builder .takes_value() };
+            }
+            if let Some(ref desc) = fa.description {
+                flag_builder = quote! { #flag_builder .description(#desc) };
+            }
+            if let Some(ref def) = fa.default {
+                flag_builder = quote! { #flag_builder .default_value(#def) };
+            }
+            builder_tokens =
+                quote! { #builder_tokens .flag(#flag_builder .build().unwrap()) };
+        } else {
+            return Err(syn::Error::new_spanned(
+                field_ident,
+                "argot field must include either `positional` or `flag`",
+            ));
+        }
+    }
+
+    builder_tokens = quote! { #builder_tokens .build().unwrap() };
+
+    let ident = &input.ident;
+    let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
+
+    Ok(quote! {
+        impl #impl_generics ::argot::ArgotCommand for #ident #ty_generics #where_clause {
+            fn command() -> ::argot::Command {
+                #builder_tokens
+            }
+        }
+    })
+}
+
+// ---------------------------------------------------------------------------
+// Unit tests for name conversion helpers
+// ---------------------------------------------------------------------------
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_camel_to_kebab() {
+        assert_eq!(camel_to_kebab("Deploy"), "deploy");
+        assert_eq!(camel_to_kebab("DeployCommand"), "deploy-command");
+        assert_eq!(camel_to_kebab("RemoteAdd"), "remote-add");
+        assert_eq!(camel_to_kebab("SomeOtherCommand"), "some-other-command");
+    }
+
+    #[test]
+    fn test_snake_to_kebab() {
+        assert_eq!(snake_to_kebab("dry_run"), "dry-run");
+        assert_eq!(snake_to_kebab("output"), "output");
+        assert_eq!(snake_to_kebab("env"), "env");
+    }
+}

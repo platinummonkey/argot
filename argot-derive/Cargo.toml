@@ -1,0 +1,15 @@
+[package]
+name = "argot-derive"
+version = "0.1.0"
+edition = "2021"
+description = "Derive macros for the argot command framework"
+license = "MIT"
+repository = "https://github.com/platinummonkey/argot"
+
+[lib]
+proc-macro = true
+
+[dependencies]
+syn = { version = "2", features = ["full"] }
+quote = "1"
+proc-macro2 = "1"
