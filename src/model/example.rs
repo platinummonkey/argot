@@ -17,7 +17,7 @@ use serde::{Deserialize, Serialize};
 /// assert_eq!(ex.command, "myapp list");
 /// assert_eq!(ex.output.as_deref(), Some("item1\nitem2"));
 /// ```
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct Example {
     /// Short description of what the example demonstrates.
     pub description: String,

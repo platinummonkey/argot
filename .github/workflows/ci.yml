@@ -81,6 +81,35 @@ jobs:
       - name: Run tests (all features)
         run: cargo test --all-features
 
+  docs:
+    name: Docs
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache dependencies
+        uses: Swatinem/rust-cache@v2
+
+      - name: Check docs (all features)
+        run: RUSTDOCFLAGS="-D warnings" cargo doc --all-features --no-deps
+
+  audit:
+    name: Security Audit
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install cargo-audit
+        run: cargo install cargo-audit --locked
+
+      - name: Run security audit
+        run: cargo audit
+
   msrv:
     name: Minimum Supported Rust Version
     runs-on: ubuntu-latest
@@ -94,5 +123,8 @@ jobs:
       - name: Cache dependencies
         uses: Swatinem/rust-cache@v2
 
-      - name: Check MSRV
+      - name: Check MSRV (no features)
+        run: cargo check
+
+      - name: Check MSRV (all features)
         run: cargo check --all-features

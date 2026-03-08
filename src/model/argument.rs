@@ -25,7 +25,7 @@ use super::BuildError;
 /// assert!(arg.required);
 /// assert!(arg.default.is_none());
 /// ```
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct Argument {
     /// The canonical name of this argument, used as the key in [`crate::ParsedCommand::args`].
     pub name: String,
@@ -119,7 +119,7 @@ impl ArgumentBuilder {
     /// Mark this argument as variadic (consumes all remaining tokens).
     ///
     /// A variadic argument must be the last argument defined on the command.
-    /// [`CommandBuilder::build`] enforces this constraint and returns
+    /// [`crate::CommandBuilder::build`] enforces this constraint and returns
     /// [`crate::BuildError::VariadicNotLast`] if a variadic argument is
     /// followed by another argument.
     pub fn variadic(mut self) -> Self {

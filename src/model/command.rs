@@ -184,6 +184,41 @@ impl PartialEq for Command {
     }
 }
 
+impl Eq for Command {}
+
+impl std::hash::Hash for Command {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.canonical.hash(state);
+        self.aliases.hash(state);
+        self.spellings.hash(state);
+        self.summary.hash(state);
+        self.description.hash(state);
+        self.arguments.hash(state);
+        self.flags.hash(state);
+        self.examples.hash(state);
+        self.subcommands.hash(state);
+        self.best_practices.hash(state);
+        self.anti_patterns.hash(state);
+        // handler is intentionally excluded (not hashable)
+    }
+}
+
+impl PartialOrd for Command {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+/// Commands are ordered by canonical name, then by their full field contents.
+impl Ord for Command {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.canonical
+            .cmp(&other.canonical)
+            .then_with(|| self.summary.cmp(&other.summary))
+            .then_with(|| self.aliases.cmp(&other.aliases))
+    }
+}
+
 impl Command {
     /// Create a new [`CommandBuilder`] with the given canonical name.
     ///

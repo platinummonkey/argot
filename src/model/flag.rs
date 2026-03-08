@@ -22,7 +22,7 @@ use super::BuildError;
 /// assert_eq!(flag.short, Some('v'));
 /// assert!(!flag.takes_value);
 /// ```
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct Flag {
     /// The long flag name, used as `--name` on the command line and as the key
     /// in [`crate::ParsedCommand::flags`].
