@@ -213,8 +213,14 @@ impl Cli {
                 "Structured JSON output for agent discovery. \
                  `query commands` lists all commands; `query <name>` returns metadata for one.",
             )
-            .example(crate::model::Example::new("query commands", "List all commands as JSON"))
-            .example(crate::model::Example::new("query deploy", "Get metadata for the deploy command"))
+            .example(crate::model::Example::new(
+                "query commands",
+                "List all commands as JSON",
+            ))
+            .example(crate::model::Example::new(
+                "query deploy",
+                "Get metadata for the deploy command",
+            ))
             .build()
             .expect("built-in query command should always build");
         self.registry.push(query_cmd);
@@ -378,6 +384,67 @@ impl Cli {
         self.run(std::env::args().skip(1))
     }
 
+    /// Parse, dispatch, and exit the process with an appropriate exit code.
+    ///
+    /// On success exits with code `0`. On any error, prints the error to `stderr`
+    /// and exits with code `1`.
+    ///
+    /// This is the recommended entry point for binary crates that want `main`
+    /// to be a one-liner:
+    ///
+    /// ```no_run
+    /// use argot::{Cli, Command};
+    /// use std::sync::Arc;
+    ///
+    /// fn main() {
+    ///     Cli::new(vec![
+    ///         Command::builder("run")
+    ///             .handler(Arc::new(|_| Ok(())))
+    ///             .build()
+    ///             .unwrap(),
+    ///     ])
+    ///     .run_env_args_and_exit();
+    /// }
+    /// ```
+    ///
+    /// # Panics
+    ///
+    /// Does not panic; all errors are handled by printing to stderr and exiting.
+    pub fn run_and_exit(&self, args: impl IntoIterator<Item = impl AsRef<str>>) -> ! {
+        match self.run(args) {
+            Ok(()) => std::process::exit(0),
+            Err(e) => {
+                eprintln!("error: {}", e);
+                std::process::exit(1);
+            }
+        }
+    }
+
+    /// Convenience: [`run_and_exit`][Self::run_and_exit] using `std::env::args().skip(1)`.
+    pub fn run_env_args_and_exit(&self) -> ! {
+        self.run_and_exit(std::env::args().skip(1))
+    }
+
+    /// Async version of [`run_and_exit`][Self::run_and_exit].
+    ///
+    /// Must be called from an async context (e.g., `#[tokio::main]`).
+    #[cfg(feature = "async")]
+    pub async fn run_async_and_exit(&self, args: impl IntoIterator<Item = impl AsRef<str>>) -> ! {
+        match self.run_async(args).await {
+            Ok(()) => std::process::exit(0),
+            Err(e) => {
+                eprintln!("error: {}", e);
+                std::process::exit(1);
+            }
+        }
+    }
+
+    /// Convenience: [`run_async_and_exit`][Self::run_async_and_exit] using `std::env::args().skip(1)`.
+    #[cfg(feature = "async")]
+    pub async fn run_env_args_async_and_exit(&self) -> ! {
+        self.run_async_and_exit(std::env::args().skip(1)).await
+    }
+
     /// Parse and dispatch a command asynchronously.
     ///
     /// Behaves identically to [`Cli::run`] but also invokes
@@ -404,8 +471,8 @@ impl Cli {
         let argv: Vec<&str> = args.iter().map(String::as_str).collect();
 
         // ── Built-in: query support ───────────────────────────────────────────
-        if self.query_support && argv.first().map(|s| *s) == Some("query") {
-            let refs: Vec<&str> = argv.iter().map(|s| *s).collect();
+        if self.query_support && argv.first().copied() == Some("query") {
+            let refs: Vec<&str> = argv.to_vec();
             return self.handle_query(&refs[1..]);
         }
 
@@ -514,13 +581,17 @@ impl Cli {
     // ── Private helpers ───────────────────────────────────────────────────
 
     fn handle_query(&self, args: &[&str]) -> Result<(), CliError> {
+        // Strip --json flag (JSON is always the output format; --json accepted for compatibility).
+        let args: Vec<&str> = args.iter().copied().filter(|a| *a != "--json").collect();
+        let args = args.as_slice();
+
         match args.first().copied() {
             // `query commands` → JSON array of all top-level commands
             None | Some("commands") => {
                 let json = self.registry.to_json().map_err(|e| {
-                    CliError::Handler(
-                        Box::<dyn std::error::Error + Send + Sync>::from(e.to_string()),
-                    )
+                    CliError::Handler(Box::<dyn std::error::Error + Send + Sync>::from(
+                        e.to_string(),
+                    ))
                 })?;
                 println!("{}", json);
                 Ok(())
@@ -536,17 +607,14 @@ impl Cli {
                         resolver.resolve(name).ok()
                     })
                     .ok_or_else(|| {
-                        CliError::Handler(
-                            Box::<dyn std::error::Error + Send + Sync>::from(format!(
-                                "unknown command: `{}`",
-                                name
-                            )),
-                        )
+                        CliError::Handler(Box::<dyn std::error::Error + Send + Sync>::from(
+                            format!("unknown command: `{}`", name),
+                        ))
                     })?;
                 let json = serde_json::to_string_pretty(cmd).map_err(|e| {
-                    CliError::Handler(
-                        Box::<dyn std::error::Error + Send + Sync>::from(e.to_string()),
-                    )
+                    CliError::Handler(Box::<dyn std::error::Error + Send + Sync>::from(
+                        e.to_string(),
+                    ))
                 })?;
                 println!("{}", json);
                 Ok(())
@@ -806,8 +874,14 @@ mod tests {
     fn test_query_commands_outputs_json() {
         use crate::model::Command;
         let cli = super::Cli::new(vec![
-            Command::builder("deploy").summary("Deploy").build().unwrap(),
-            Command::builder("status").summary("Status").build().unwrap(),
+            Command::builder("deploy")
+                .summary("Deploy")
+                .build()
+                .unwrap(),
+            Command::builder("status")
+                .summary("Status")
+                .build()
+                .unwrap(),
         ])
         .with_query_support();
 
@@ -819,9 +893,10 @@ mod tests {
     #[test]
     fn test_query_named_command_outputs_json() {
         use crate::model::Command;
-        let cli = super::Cli::new(vec![
-            Command::builder("deploy").summary("Deploy svc").build().unwrap(),
-        ])
+        let cli = super::Cli::new(vec![Command::builder("deploy")
+            .summary("Deploy svc")
+            .build()
+            .unwrap()])
         .with_query_support();
 
         assert!(cli.run(["query", "deploy"]).is_ok());
@@ -830,10 +905,8 @@ mod tests {
     #[test]
     fn test_query_unknown_command_errors() {
         use crate::model::Command;
-        let cli = super::Cli::new(vec![
-            Command::builder("deploy").build().unwrap(),
-        ])
-        .with_query_support();
+        let cli =
+            super::Cli::new(vec![Command::builder("deploy").build().unwrap()]).with_query_support();
 
         assert!(cli.run(["query", "nonexistent"]).is_err());
     }
@@ -841,12 +914,23 @@ mod tests {
     #[test]
     fn test_query_meta_command_appears_in_registry() {
         use crate::model::Command;
-        let cli = super::Cli::new(vec![
-            Command::builder("run").build().unwrap(),
-        ])
-        .with_query_support();
+        let cli =
+            super::Cli::new(vec![Command::builder("run").build().unwrap()]).with_query_support();
 
         // The injected `query` command should be discoverable.
         assert!(cli.registry.get_command("query").is_some());
+    }
+
+    #[test]
+    fn test_query_with_json_flag() {
+        use crate::model::Command;
+        let cli = super::Cli::new(vec![Command::builder("deploy")
+            .summary("Deploy")
+            .build()
+            .unwrap()])
+        .with_query_support();
+        // --json flag must not cause an error
+        assert!(cli.run(["query", "deploy", "--json"]).is_ok());
+        assert!(cli.run(["query", "commands", "--json"]).is_ok());
     }
 }

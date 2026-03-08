@@ -402,13 +402,11 @@ mod tests {
 
     #[test]
     fn test_spelling_resolves_to_canonical() {
-        let cmds = vec![
-            Command::builder("deploy")
-                .alias("release")
-                .spelling("deply")
-                .build()
-                .unwrap(),
-        ];
+        let cmds = vec![Command::builder("deploy")
+            .alias("release")
+            .spelling("deply")
+            .build()
+            .unwrap()];
         let resolver = Resolver::new(&cmds);
 
         // Canonical
@@ -436,7 +434,10 @@ mod tests {
     fn test_spelling_not_in_ambiguity_candidates() {
         // Spellings should not be surfaced in "did you mean" candidates.
         let cmds = vec![
-            Command::builder("deploy").spelling("deply").build().unwrap(),
+            Command::builder("deploy")
+                .spelling("deply")
+                .build()
+                .unwrap(),
             Command::builder("delete").build().unwrap(),
         ];
         let resolver = Resolver::new(&cmds);

@@ -98,7 +98,7 @@ Prefer:
 
 - explicit types with `struct` and `enum`
 - deterministic parsing with no ambiguous fallbacks
-- table-driven tests using `#[test]` and `rstest` or similar
+- unit tests using `#[test]`; table-driven patterns via helper functions or loops
 - `derive` macros (`Debug`, `Clone`, `PartialEq`) where appropriate
 - `thiserror` for structured error types
 - builder patterns for command construction

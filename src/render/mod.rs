@@ -440,11 +440,7 @@ pub fn render_resolve_error(error: &crate::resolver::ResolveError) -> String {
 /// assert!(script.contains("deploy"));
 /// assert!(script.contains("status"));
 /// ```
-pub fn render_completion(
-    shell: Shell,
-    program: &str,
-    registry: &crate::query::Registry,
-) -> String {
+pub fn render_completion(shell: Shell, program: &str, registry: &crate::query::Registry) -> String {
     match shell {
         Shell::Bash => render_completion_bash(program, registry),
         Shell::Zsh => render_completion_zsh(program, registry),
@@ -456,7 +452,11 @@ fn render_completion_bash(program: &str, registry: &crate::query::Registry) -> S
     let func_name = format!("_{}_completions", program.replace('-', "_"));
 
     // Collect: top-level command names
-    let top_level: Vec<&str> = registry.commands().iter().map(|c| c.canonical.as_str()).collect();
+    let top_level: Vec<&str> = registry
+        .commands()
+        .iter()
+        .map(|c| c.canonical.as_str())
+        .collect();
 
     // Build per-command flag completions
     let mut cmd_cases = String::new();
@@ -506,17 +506,27 @@ complete -F {func_name} {program}
 fn render_completion_zsh(program: &str, registry: &crate::query::Registry) -> String {
     let mut commands_block = String::new();
     for cmd in registry.commands() {
-        let desc = if cmd.summary.is_empty() { &cmd.canonical } else { &cmd.summary };
+        let desc = if cmd.summary.is_empty() {
+            &cmd.canonical
+        } else {
+            &cmd.summary
+        };
         commands_block.push_str(&format!("    '{}:{}'\n", cmd.canonical, desc));
     }
 
     let mut subcommand_cases = String::new();
     for entry in registry.iter_all_recursive() {
         let cmd = entry.command;
-        if cmd.flags.is_empty() && cmd.arguments.is_empty() { continue; }
+        if cmd.flags.is_empty() && cmd.arguments.is_empty() {
+            continue;
+        }
         let mut args_spec = String::new();
         for flag in &cmd.flags {
-            let desc = if flag.description.is_empty() { flag.name.as_str() } else { flag.description.as_str() };
+            let desc = if flag.description.is_empty() {
+                flag.name.as_str()
+            } else {
+                flag.description.as_str()
+            };
             if flag.takes_value {
                 args_spec.push_str(&format!("    '--{}[{}]:value:_default'\n", flag.name, desc));
             } else {
@@ -571,7 +581,11 @@ fn render_completion_fish(program: &str, registry: &crate::query::Registry) -> S
 
     // Top-level commands
     for cmd in registry.commands() {
-        let desc = if cmd.summary.is_empty() { String::new() } else { format!(" -d '{}'", cmd.summary.replace('\'', "\\'")) };
+        let desc = if cmd.summary.is_empty() {
+            String::new()
+        } else {
+            format!(" -d '{}'", cmd.summary.replace('\'', "\\'"))
+        };
         lines.push_str(&format!(
             "complete -c {program} -f -n '__fish_use_subcommand' -a '{}'{}\n",
             cmd.canonical, desc
@@ -585,7 +599,11 @@ fn render_completion_fish(program: &str, registry: &crate::query::Registry) -> S
         let cmd = entry.command;
         let subcmd = &cmd.canonical;
         for flag in &cmd.flags {
-            let desc = if flag.description.is_empty() { String::new() } else { format!(" -d '{}'", flag.description.replace('\'', "\\'")) };
+            let desc = if flag.description.is_empty() {
+                String::new()
+            } else {
+                format!(" -d '{}'", flag.description.replace('\'', "\\'"))
+            };
             let req = if flag.takes_value { " -r" } else { "" };
             lines.push_str(&format!(
                 "complete -c {program} -n '__fish_seen_subcommand_from {subcmd}' -l '{name}'{req}{desc}\n",
@@ -626,7 +644,7 @@ fn render_completion_fish(program: &str, registry: &crate::query::Registry) -> S
 ///         .build().unwrap())
 ///     .build().unwrap();
 ///
-/// let schema = render_json_schema(&cmd);
+/// let schema = render_json_schema(&cmd).unwrap();
 /// let v: serde_json::Value = serde_json::from_str(&schema).unwrap();
 /// assert_eq!(v["title"], "deploy");
 /// assert_eq!(v["properties"]["env"]["type"], "string");
@@ -634,7 +652,7 @@ fn render_completion_fish(program: &str, registry: &crate::query::Registry) -> S
 /// let strats = v["properties"]["strategy"]["enum"].as_array().unwrap();
 /// assert_eq!(strats.len(), 2);
 /// ```
-pub fn render_json_schema(command: &Command) -> String {
+pub fn render_json_schema(command: &Command) -> Result<String, serde_json::Error> {
     use serde_json::{json, Map, Value};
 
     let mut properties: Map<String, Value> = Map::new();
@@ -715,7 +733,7 @@ pub fn render_json_schema(command: &Command) -> String {
         schema["required"] = Value::Array(required);
     }
 
-    serde_json::to_string_pretty(&schema).unwrap_or_default()
+    serde_json::to_string_pretty(&schema)
 }
 
 fn build_usage(command: &Command) -> String {
@@ -948,12 +966,11 @@ mod tests {
     #[test]
     fn test_render_completion_bash_includes_flags() {
         use crate::query::Registry;
-        let reg = Registry::new(vec![
-            Command::builder("deploy")
-                .flag(Flag::builder("env").takes_value().build().unwrap())
-                .flag(Flag::builder("dry-run").build().unwrap())
-                .build().unwrap(),
-        ]);
+        let reg = Registry::new(vec![Command::builder("deploy")
+            .flag(Flag::builder("env").takes_value().build().unwrap())
+            .flag(Flag::builder("dry-run").build().unwrap())
+            .build()
+            .unwrap()]);
         let script = render_completion(Shell::Bash, "t", &reg);
         assert!(script.contains("--env"));
         assert!(script.contains("--dry-run"));
@@ -963,15 +980,30 @@ mod tests {
     fn test_render_json_schema_properties() {
         let cmd = Command::builder("deploy")
             .summary("Deploy a service")
-            .argument(Argument::builder("env").required().description("Target env").build().unwrap())
-            .flag(Flag::builder("dry-run").description("Simulate").build().unwrap())
-            .flag(Flag::builder("strategy")
-                .takes_value()
-                .choices(["rolling", "canary"])
-                .build().unwrap())
-            .build().unwrap();
+            .argument(
+                Argument::builder("env")
+                    .required()
+                    .description("Target env")
+                    .build()
+                    .unwrap(),
+            )
+            .flag(
+                Flag::builder("dry-run")
+                    .description("Simulate")
+                    .build()
+                    .unwrap(),
+            )
+            .flag(
+                Flag::builder("strategy")
+                    .takes_value()
+                    .choices(["rolling", "canary"])
+                    .build()
+                    .unwrap(),
+            )
+            .build()
+            .unwrap();
 
-        let schema = render_json_schema(&cmd);
+        let schema = render_json_schema(&cmd).unwrap();
         let v: serde_json::Value = serde_json::from_str(&schema).unwrap();
 
         assert_eq!(v["title"], "deploy");
@@ -987,12 +1019,26 @@ mod tests {
     #[test]
     fn test_render_json_schema_empty_command() {
         let cmd = Command::builder("ping").build().unwrap();
-        let schema = render_json_schema(&cmd);
+        let schema = render_json_schema(&cmd).unwrap();
         let v: serde_json::Value = serde_json::from_str(&schema).unwrap();
         assert_eq!(v["title"], "ping");
-        assert!(v["required"].is_null() || v["required"].as_array().map(|a| a.is_empty()).unwrap_or(true));
+        assert!(
+            v["required"].is_null()
+                || v["required"]
+                    .as_array()
+                    .map(|a| a.is_empty())
+                    .unwrap_or(true)
+        );
     }
-}
+
+    #[test]
+    fn test_render_json_schema_returns_result() {
+        let cmd = Command::builder("ping").build().unwrap();
+        // Must return Ok, not panic.
+        let result = render_json_schema(&cmd);
+        assert!(result.is_ok());
+        let _: serde_json::Value = serde_json::from_str(&result.unwrap()).unwrap();
+    }
 
     #[test]
     fn test_spellings_not_in_help_output() {
