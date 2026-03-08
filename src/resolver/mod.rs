@@ -1,3 +1,41 @@
+//! String-to-command resolution with prefix and ambiguity detection.
+//!
+//! The resolver implements a three-phase algorithm:
+//!
+//! 1. **Normalize** — trim whitespace and lowercase the input.
+//! 2. **Exact match** — check the input against every command's canonical
+//!    name, aliases, and spellings. Return immediately if exactly one matches.
+//! 3. **Prefix match** — check which commands have at least one matchable
+//!    string that *starts with* the normalized input. If exactly one command
+//!    matches, return it. If more than one matches, return
+//!    [`ResolveError::Ambiguous`]. If none match, return
+//!    [`ResolveError::Unknown`].
+//!
+//! This algorithm allows users (and agents) to type unambiguous prefixes like
+//! `dep` instead of `deploy` while still producing clear errors when a prefix
+//! is shared by multiple commands.
+//!
+//! # Example
+//!
+//! ```
+//! # use argot::{Command, Resolver};
+//! let cmds = vec![
+//!     Command::builder("list").alias("ls").build().unwrap(),
+//!     Command::builder("log").build().unwrap(),
+//! ];
+//!
+//! let resolver = Resolver::new(&cmds);
+//!
+//! // Exact canonical
+//! assert_eq!(resolver.resolve("list").unwrap().canonical, "list");
+//! // Exact alias
+//! assert_eq!(resolver.resolve("ls").unwrap().canonical, "list");
+//! // Unambiguous prefix
+//! assert_eq!(resolver.resolve("lo").unwrap().canonical, "log");
+//! // Ambiguous prefix — "l" matches both "list" and "log"
+//! assert!(resolver.resolve("l").is_err());
+//! ```
+
 use thiserror::Error;
 
 use crate::model::Command;
@@ -5,22 +43,55 @@ use crate::model::Command;
 /// Errors produced by [`Resolver::resolve`].
 #[derive(Debug, Error, PartialEq)]
 pub enum ResolveError {
+    /// The input did not match any registered command's canonical name, alias,
+    /// spelling, or prefix thereof.
     #[error("unknown command: {0}")]
     Unknown(String),
+    /// The input matched more than one command as a prefix, making it
+    /// ambiguous. The `candidates` field lists the canonical names of the
+    /// matching commands.
     #[error("ambiguous command \"{input}\": could match {candidates:?}")]
     Ambiguous {
+        /// The original (untrimmed) input string.
         input: String,
+        /// Canonical names of all commands that matched the prefix.
         candidates: Vec<String>,
     },
 }
 
 /// Resolves a string token to a [`Command`] in a slice, supporting aliases,
 /// spellings, and unambiguous prefix matching.
+///
+/// Create a resolver by passing a slice of commands to [`Resolver::new`], then
+/// call [`Resolver::resolve`] with a raw string token. The returned reference
+/// borrows from the original command slice (lifetime `'a`).
+///
+/// # Examples
+///
+/// ```
+/// # use argot::{Command, Resolver};
+/// let cmds = vec![
+///     Command::builder("deploy").alias("d").build().unwrap(),
+///     Command::builder("delete").build().unwrap(),
+/// ];
+/// let resolver = Resolver::new(&cmds);
+///
+/// // Exact match via alias
+/// assert_eq!(resolver.resolve("d").unwrap().canonical, "deploy");
+/// // Prefix "del" is unambiguous
+/// assert_eq!(resolver.resolve("del").unwrap().canonical, "delete");
+/// ```
 pub struct Resolver<'a> {
     commands: &'a [Command],
 }
 
 impl<'a> Resolver<'a> {
+    /// Create a new `Resolver` over the given command slice.
+    ///
+    /// # Arguments
+    ///
+    /// - `commands` — The slice of commands to resolve against. The lifetime
+    ///   `'a` is propagated to the references returned by [`Resolver::resolve`].
     pub fn new(commands: &'a [Command]) -> Self {
         Self { commands }
     }
@@ -32,6 +103,30 @@ impl<'a> Resolver<'a> {
     /// 2. Exact match across canonical/aliases/spellings → return immediately.
     /// 3. Prefix match → return if exactly one command matches; else `Ambiguous`.
     /// 4. No match → `Unknown`.
+    ///
+    /// # Arguments
+    ///
+    /// - `input` — The raw string to resolve (trimming and lowercasing are
+    ///   applied internally).
+    ///
+    /// # Errors
+    ///
+    /// - [`ResolveError::Unknown`] — no command matched `input` exactly or as
+    ///   a prefix.
+    /// - [`ResolveError::Ambiguous`] — `input` is a prefix of more than one
+    ///   command; the `candidates` field lists their canonical names.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use argot::{Command, Resolver, ResolveError};
+    /// let cmds = vec![Command::builder("get").build().unwrap()];
+    /// let resolver = Resolver::new(&cmds);
+    ///
+    /// assert_eq!(resolver.resolve("get").unwrap().canonical, "get");
+    /// assert_eq!(resolver.resolve("GET").unwrap().canonical, "get"); // case-insensitive
+    /// assert!(matches!(resolver.resolve("xyz"), Err(ResolveError::Unknown(_))));
+    /// ```
     pub fn resolve(&self, input: &str) -> Result<&'a Command, ResolveError> {
         let normalized = input.trim().to_lowercase();
 

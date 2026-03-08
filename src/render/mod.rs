@@ -1,6 +1,50 @@
+//! Human-readable and Markdown renderers for commands.
+//!
+//! This module exposes three rendering functions and one disambiguation helper:
+//!
+//! - **[`render_help`]** — produces a multi-section plain-text help page
+//!   (NAME, SUMMARY, DESCRIPTION, USAGE, ARGUMENTS, FLAGS, SUBCOMMANDS,
+//!   EXAMPLES, BEST PRACTICES, ANTI-PATTERNS). Sections that have no content
+//!   are omitted.
+//!
+//! - **[`render_subcommand_list`]** — produces a compact two-column listing of
+//!   `canonical  summary` lines, suitable for a top-level `--help` display.
+//!
+//! - **[`render_markdown`]** — produces a GitHub-flavored Markdown page with
+//!   `##` headings, argument/flag tables, and fenced code blocks for examples.
+//!
+//! - **[`render_ambiguity`]** — formats a human-readable message when a
+//!   command token is ambiguous.
+//!
+//! None of the functions print to stdout/stderr directly; all return a
+//! `String` that the caller can write wherever appropriate.
+
 use crate::model::Command;
 
 /// Render a human-readable help page for a command.
+///
+/// The output contains the following sections (each omitted when empty):
+/// NAME, SUMMARY, DESCRIPTION, USAGE, ARGUMENTS, FLAGS, SUBCOMMANDS,
+/// EXAMPLES, BEST PRACTICES, ANTI-PATTERNS.
+///
+/// # Arguments
+///
+/// - `command` — The command to render help for.
+///
+/// # Examples
+///
+/// ```
+/// # use argot::{Command, render_help};
+/// let cmd = Command::builder("greet")
+///     .summary("Say hello")
+///     .build()
+///     .unwrap();
+///
+/// let help = render_help(&cmd);
+/// assert!(help.contains("NAME"));
+/// assert!(help.contains("greet"));
+/// assert!(help.contains("SUMMARY"));
+/// ```
 pub fn render_help(command: &Command) -> String {
     let mut out = String::new();
 
@@ -89,6 +133,27 @@ pub fn render_help(command: &Command) -> String {
 }
 
 /// Render a compact listing of multiple commands (e.g. for a top-level help).
+///
+/// Each line has the format `  canonical  summary`. This is suitable for
+/// displaying all registered commands when no specific command is requested.
+///
+/// # Arguments
+///
+/// - `commands` — The commands to list.
+///
+/// # Examples
+///
+/// ```
+/// # use argot::{Command, render_subcommand_list};
+/// let cmds = vec![
+///     Command::builder("list").summary("List items").build().unwrap(),
+///     Command::builder("get").summary("Get an item").build().unwrap(),
+/// ];
+///
+/// let listing = render_subcommand_list(&cmds);
+/// assert!(listing.contains("list"));
+/// assert!(listing.contains("List items"));
+/// ```
 pub fn render_subcommand_list(commands: &[Command]) -> String {
     let mut out = String::new();
     for cmd in commands {
@@ -98,6 +163,33 @@ pub fn render_subcommand_list(commands: &[Command]) -> String {
 }
 
 /// Render a Markdown documentation page for a command.
+///
+/// The output is GitHub-flavored Markdown with:
+/// - A `# canonical` top-level heading.
+/// - `##` headings for Description, Usage, Arguments, Flags, Subcommands,
+///   Examples, Best Practices, and Anti-Patterns.
+/// - Arguments and flags rendered as Markdown tables.
+/// - Usage and examples rendered as fenced code blocks.
+///
+/// Empty sections are omitted.
+///
+/// # Arguments
+///
+/// - `command` — The command to render documentation for.
+///
+/// # Examples
+///
+/// ```
+/// # use argot::{Command, render_markdown};
+/// let cmd = Command::builder("deploy")
+///     .summary("Deploy the app")
+///     .build()
+///     .unwrap();
+///
+/// let md = render_markdown(&cmd);
+/// assert!(md.starts_with("# deploy"));
+/// assert!(md.contains("Deploy the app"));
+/// ```
 pub fn render_markdown(command: &Command) -> String {
     let mut out = String::new();
 
@@ -181,6 +273,25 @@ pub fn render_markdown(command: &Command) -> String {
 }
 
 /// Render a human-readable disambiguation message.
+///
+/// Used when a command token matches more than one candidate as a prefix.
+/// The message lists all candidate canonical names so the user or agent can
+/// choose the intended command.
+///
+/// # Arguments
+///
+/// - `input` — The ambiguous token as typed by the user.
+/// - `candidates` — Canonical names of all matching commands.
+///
+/// # Examples
+///
+/// ```
+/// # use argot::render_ambiguity;
+/// let msg = render_ambiguity("l", &["list".to_string(), "log".to_string()]);
+/// assert!(msg.contains("Ambiguous command"));
+/// assert!(msg.contains("list"));
+/// assert!(msg.contains("log"));
+/// ```
 pub fn render_ambiguity(input: &str, candidates: &[String]) -> String {
     let list = candidates
         .iter()

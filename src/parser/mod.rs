@@ -1,3 +1,45 @@
+//! Tokenization and argument parsing for raw `argv` slices.
+//!
+//! The parser operates in three stages:
+//!
+//! 1. **Tokenize** — the raw `&[&str]` argv is converted to a typed
+//!    token stream by the internal `tokenizer` module.
+//!    Each token is one of: a plain word, a long flag (`--name` / `--name=val`),
+//!    a short flag (`-f` / `-fval`), or the `--` separator.
+//!
+//! 2. **Subcommand tree walk** — the first word token is resolved to a
+//!    top-level [`Command`] using the [`Resolver`]. While the
+//!    resolved command has subcommands and the next token is a word that
+//!    resolves to one of them, the parser descends into the subcommand tree.
+//!    A word that fails to resolve is treated as the start of positional
+//!    arguments rather than an error.
+//!
+//! 3. **Flag and argument binding** — remaining tokens are bound: long and
+//!    short flag tokens are matched against the resolved command's flag
+//!    definitions; plain word tokens are accumulated as positional arguments.
+//!    After all tokens are consumed, positional arguments are bound by
+//!    declaration order; required flags and arguments are validated; and
+//!    defaults are applied.
+//!
+//! # Example
+//!
+//! ```
+//! # use argot::{Command, Argument, Flag, Parser};
+//! let cmd = Command::builder("list")
+//!     .argument(Argument::builder("filter").build().unwrap())
+//!     .flag(Flag::builder("verbose").short('v').build().unwrap())
+//!     .build()
+//!     .unwrap();
+//!
+//! let cmds = vec![cmd];
+//! let parser = Parser::new(&cmds);
+//!
+//! let parsed = parser.parse(&["list", "foo", "-v"]).unwrap();
+//! assert_eq!(parsed.command.canonical, "list");
+//! assert_eq!(parsed.args["filter"], "foo");
+//! assert_eq!(parsed.flags["verbose"], "true");
+//! ```
+
 mod tokenizer;
 
 use std::collections::HashMap;
@@ -12,34 +54,140 @@ use tokenizer::{tokenize, Token};
 /// Errors produced by [`Parser::parse`].
 #[derive(Debug, Error, PartialEq)]
 pub enum ParseError {
+    /// The argv slice was empty — no command name was provided.
     #[error("no command provided")]
     NoCommand,
+    /// The command (or subcommand) token could not be resolved.
+    ///
+    /// Wraps a [`ResolveError`] transparently so callers can match on
+    /// [`ResolveError::Unknown`] and [`ResolveError::Ambiguous`] directly.
     #[error(transparent)]
     Resolve(#[from] ResolveError),
+    /// A required positional argument was not supplied.
+    ///
+    /// The inner `String` is the argument's canonical name.
     #[error("missing required argument: {0}")]
     MissingArgument(String),
+    /// More positional arguments were supplied than the command declares.
+    ///
+    /// The inner `String` is the first unexpected token.
     #[error("unexpected argument: {0}")]
     UnexpectedArgument(String),
+    /// A required flag was not supplied.
+    ///
+    /// The inner `String` is the flag's long name (without `--`).
     #[error("missing required flag: --{0}")]
     MissingFlag(String),
+    /// A value-taking flag was provided without a following value.
     #[error("flag --{name} requires a value")]
-    FlagMissingValue { name: String },
+    FlagMissingValue {
+        /// The long name of the flag that was missing its value.
+        name: String,
+    },
+    /// A flag token (`--name` or `-c`) was not recognized by the resolved
+    /// command.
+    ///
+    /// The inner `String` includes the leading dashes, e.g. `"--foo"` or
+    /// `"-x"`.
     #[error("unknown flag: {0}")]
     UnknownFlag(String),
+    /// A word token following a subcommand-only parent did not match any
+    /// declared subcommand.
+    ///
+    /// Only raised when the parent command has no positional arguments defined;
+    /// otherwise the word is treated as a positional value.
+    #[error("unknown subcommand `{got}` for `{parent}`")]
+    UnknownSubcommand {
+        /// The canonical name of the parent command.
+        parent: String,
+        /// The unrecognised token as supplied by the caller.
+        got: String,
+    },
 }
 
 /// Parses raw argument slices against a slice of registered [`Command`]s.
+///
+/// Create a `Parser` with [`Parser::new`], then call [`Parser::parse`] for
+/// each invocation. The parser borrows the command slice for lifetime `'a`;
+/// the returned [`ParsedCommand`] also carries that lifetime.
+///
+/// # Examples
+///
+/// ```
+/// # use argot::{Command, Parser};
+/// let cmds = vec![Command::builder("status").build().unwrap()];
+/// let parser = Parser::new(&cmds);
+/// let parsed = parser.parse(&["status"]).unwrap();
+/// assert_eq!(parsed.command.canonical, "status");
+/// ```
 pub struct Parser<'a> {
     commands: &'a [Command],
 }
 
 impl<'a> Parser<'a> {
+    /// Create a new `Parser` over the given command slice.
+    ///
+    /// # Arguments
+    ///
+    /// - `commands` — Top-level commands to parse against. The lifetime `'a`
+    ///   is propagated to the [`ParsedCommand`] returned by [`Parser::parse`].
     pub fn new(commands: &'a [Command]) -> Self {
         Self { commands }
     }
 
     /// Parse `argv` (the full argument list including the command name) into a
     /// [`ParsedCommand`] that borrows from the registered command tree.
+    ///
+    /// The first element of `argv` must be a word token naming the top-level
+    /// command. Subsequent tokens are processed as described in the
+    /// [module documentation][self].
+    ///
+    /// # Arguments
+    ///
+    /// - `argv` — The argument slice to parse. Should **not** include the
+    ///   program name (`argv[0]` in `std::env::args`); the first element must
+    ///   be the command name.
+    ///
+    /// # Errors
+    ///
+    /// - [`ParseError::NoCommand`] — `argv` is empty.
+    /// - [`ParseError::Resolve`] — the command or subcommand token could not
+    ///   be resolved (wraps [`ResolveError::Unknown`] or
+    ///   [`ResolveError::Ambiguous`]).
+    /// - [`ParseError::MissingArgument`] — a required positional argument was
+    ///   absent.
+    /// - [`ParseError::UnexpectedArgument`] — more positional arguments were
+    ///   provided than the command declares.
+    /// - [`ParseError::MissingFlag`] — a required flag was absent.
+    /// - [`ParseError::FlagMissingValue`] — a value-taking flag had no
+    ///   following value.
+    /// - [`ParseError::UnknownFlag`] — an unrecognized flag was encountered.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use argot::{Command, Flag, Parser};
+    /// let cmd = Command::builder("build")
+    ///     .flag(
+    ///         Flag::builder("target")
+    ///             .takes_value()
+    ///             .default_value("debug")
+    ///             .build()
+    ///             .unwrap(),
+    ///     )
+    ///     .build()
+    ///     .unwrap();
+    ///
+    /// let cmds = vec![cmd];
+    /// let parser = Parser::new(&cmds);
+    ///
+    /// let parsed = parser.parse(&["build", "--target=release"]).unwrap();
+    /// assert_eq!(parsed.flags["target"], "release");
+    ///
+    /// // Default is applied when flag is absent
+    /// let parsed2 = parser.parse(&["build"]).unwrap();
+    /// assert_eq!(parsed2.flags["target"], "debug");
+    /// ```
     pub fn parse(&self, argv: &[&str]) -> Result<ParsedCommand<'a>, ParseError> {
         let tokens = tokenize(argv);
         let mut pos = 0;
@@ -69,7 +217,24 @@ impl<'a> Parser<'a> {
                             cmd = sub;
                             pos += 1;
                         }
-                        Err(_) => break, // treat as positional argument
+                        Err(e) => match e {
+                            // Ambiguous is always a user error — propagate it.
+                            ResolveError::Ambiguous { .. } => {
+                                return Err(ParseError::Resolve(e))
+                            }
+                            // Unknown: propagate only when the parent has no
+                            // positional arguments (nowhere legitimate for the
+                            // word to land). Otherwise break and treat as positional.
+                            ResolveError::Unknown(_) => {
+                                if cmd.arguments.is_empty() {
+                                    return Err(ParseError::UnknownSubcommand {
+                                        parent: cmd.canonical.clone(),
+                                        got: w.clone(),
+                                    });
+                                }
+                                break;
+                            }
+                        }
                     }
                 }
                 _ => break,
@@ -494,5 +659,57 @@ mod tests {
             parser.parse(&["build", "--target"]),
             Err(ParseError::FlagMissingValue { .. })
         ));
+    }
+
+    #[test]
+    fn test_ambiguous_subcommand() {
+        let fetch = Command::builder("fetch").build().unwrap();
+        let force_push = Command::builder("force-push").build().unwrap();
+        let cmds = vec![Command::builder("git")
+            .subcommand(fetch)
+            .subcommand(force_push)
+            .build()
+            .unwrap()];
+        let parser = Parser::new(&cmds);
+        let result = parser.parse(&["git", "f"]);
+        assert!(
+            matches!(result, Err(ParseError::Resolve(ResolveError::Ambiguous { .. }))),
+            "expected Resolve(Ambiguous), got {:?}",
+            result
+        );
+    }
+
+    #[test]
+    fn test_unknown_subcommand_on_no_positionals() {
+        let cmds = vec![Command::builder("remote")
+            .subcommand(Command::builder("add").build().unwrap())
+            .build()
+            .unwrap()];
+        let parser = Parser::new(&cmds);
+        assert!(matches!(
+            parser.parse(&["remote", "xyz"]),
+            Err(ParseError::UnknownSubcommand { .. })
+        ));
+    }
+
+    #[test]
+    fn test_unknown_word_treated_as_positional_when_parent_has_args() {
+        let cmds = vec![Command::builder("deploy")
+            .subcommand(Command::builder("production").build().unwrap())
+            .argument(
+                Argument::builder("target")
+                    .description("deployment target")
+                    .required()
+                    .build()
+                    .unwrap(),
+            )
+            .build()
+            .unwrap()];
+        let parser = Parser::new(&cmds);
+        let result = parser.parse(&["deploy", "staging"]);
+        assert!(result.is_ok(), "expected Ok, got {:?}", result);
+        let parsed = result.unwrap();
+        assert_eq!(parsed.command.canonical, "deploy");
+        assert_eq!(parsed.args.get("target").map(String::as_str), Some("staging"));
     }
 }

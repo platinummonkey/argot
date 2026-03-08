@@ -3,31 +3,68 @@ use proc_macro2::TokenStream as TokenStream2;
 use quote::quote;
 use syn::{parse_macro_input, Data, DeriveInput, Fields, LitChar, LitStr};
 
-/// Derive macro for the `ArgotCommand` trait.
+/// Derive macro that implements [`argot::ArgotCommand`] for a struct.
 ///
 /// Annotate a struct with `#[derive(ArgotCommand)]` to automatically implement
-/// `ArgotCommand::command()` using `#[argot(...)]` attributes.
+/// `ArgotCommand::command()` using `#[argot(...)]` attributes on the struct
+/// and its fields.
+///
+/// The generated `command()` implementation calls [`argot::Command::builder`]
+/// and chains builder methods derived from the attributes, then calls
+/// `.build().unwrap()`. The `unwrap` will **panic** at *call time* (not at
+/// compile time) if the generated canonical name is somehow empty — this
+/// should not occur in practice because the name defaults to the kebab-case
+/// struct name.
 ///
 /// ## Struct-level attributes (`#[argot(...)]`)
 ///
-/// - `canonical = "name"` — override the canonical command name (default: struct name → kebab-case)
-/// - `summary = "text"` — one-line summary
-/// - `description = "text"` — long description
-/// - `alias = "a"` — add an alias (repeatable via multiple `#[argot(...)]` attrs or commas)
-/// - `best_practice = "text"` — add a best practice
-/// - `anti_pattern = "text"` — add an anti-pattern
+/// | Key | Type | Description |
+/// |-----|------|-------------|
+/// | `canonical = "name"` | string | Override the canonical command name. Default: struct name converted to kebab-case (e.g. `DeployApp` → `deploy-app`). |
+/// | `summary = "text"` | string | One-line summary. |
+/// | `description = "text"` | string | Long prose description. |
+/// | `alias = "a"` | string | Add an alias (repeat the attribute to add more). |
+/// | `best_practice = "text"` | string | Add a best-practice tip (repeatable). |
+/// | `anti_pattern = "text"` | string | Add an anti-pattern warning (repeatable). |
 ///
 /// ## Field-level attributes (`#[argot(...)]`)
 ///
-/// Fields without `#[argot(...)]` are skipped entirely.
+/// Fields **without** an `#[argot(...)]` attribute are skipped entirely.
+/// Every annotated field must include either `positional` or `flag`.
 ///
-/// - `positional` — treat as a positional [`Argument`]
-/// - `flag` — treat as a named [`Flag`]
-/// - `required` — mark as required
-/// - `short = 'c'` — short flag character
-/// - `takes_value` — flag consumes the next token as its value
-/// - `description = "text"` — field description
-/// - `default = "value"` — default value
+/// | Key | Description |
+/// |-----|-------------|
+/// | `positional` | Treat as a positional [`argot::Argument`]. |
+/// | `flag` | Treat as a named [`argot::Flag`]. |
+/// | `required` | Mark the argument or flag as required. |
+/// | `short = 'c'` | Short character for a flag (e.g. `short = 'v'`). |
+/// | `takes_value` | Flag consumes the next token as its value. |
+/// | `description = "text"` | Human-readable description. |
+/// | `default = "value"` | Default value string. |
+///
+/// ## Example
+///
+/// ```rust,ignore
+/// use argot::ArgotCommand;
+///
+/// #[derive(ArgotCommand)]
+/// #[argot(
+///     summary = "Deploy the application",
+///     alias = "d",
+///     best_practice = "always dry-run first"
+/// )]
+/// struct Deploy {
+///     #[argot(positional, required, description = "Target environment")]
+///     env: String,
+///
+///     #[argot(flag, short = 'n', description = "Simulate without changes")]
+///     dry_run: bool,
+/// }
+///
+/// let cmd = Deploy::command();
+/// assert_eq!(cmd.canonical, "deploy");
+/// assert_eq!(cmd.aliases, vec!["d"]);
+/// ```
 #[proc_macro_derive(ArgotCommand, attributes(argot))]
 pub fn derive_argot_command(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
