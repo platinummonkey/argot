@@ -1,0 +1,48 @@
+[workspace]
+# Only release when a release PR is merged, not on every commit to main.
+release_always = false
+
+# Create a GitHub release for each new version.
+git_release_enable = true
+git_release_type = "prod"
+git_release_latest = true
+
+# Create git tags for each new version.
+git_tag_enable = true
+git_tag_name = "v{{ version }}"
+
+[changelog]
+header = """
+# Changelog
+
+All notable changes to this project will be documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+"""
+
+body = """
+## [{{ version | trim_start_matches(pat="v") }}]\
+    {%- if release_link %} - {{ release_link }}{%- endif %} \
+    - {{ timestamp | date(format="%Y-%m-%d") }}
+{% for group, commits in commits | group_by(attribute="group") %}
+### {{ group | upper_first }}
+{% for commit in commits %}
+- {% if commit.scope %}**{{ commit.scope }}**: {% endif %}{{ commit.message | upper_first }}\
+    {% if commit.links %} \
+        {% for link in commit.links %}([{{ link.text }}]({{ link.href }})){% endfor %}\
+    {% endif %}
+{% endfor %}
+{% endfor %}
+"""
+
+commit_parsers = [
+  { message = "^feat", group = "Features" },
+  { message = "^fix", group = "Bug Fixes" },
+  { message = "^doc", group = "Documentation" },
+  { message = "^perf", group = "Performance" },
+  { message = "^refactor", group = "Refactoring" },
+  { message = "^test", group = "Testing" },
+  { message = "^chore|^ci|^build", skip = true },
+]
