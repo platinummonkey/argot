@@ -1,5 +1,9 @@
 # Argot
 
+<!-- Badges -->
+![CI](https://github.com/platinummonkey/argot/actions/workflows/ci.yml/badge.svg)
+![Coverage](https://codecov.io/gh/platinummonkey/argot/branch/main/graph/badge.svg)
+
 Argot is an **agent-first command interface framework for Rust**.
 
 Argot models command-line interfaces as **structured languages**, not just argument parsers.

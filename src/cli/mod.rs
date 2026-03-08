@@ -95,6 +95,7 @@ pub struct Cli {
     version: Option<String>,
     middlewares: Vec<Box<dyn crate::middleware::Middleware>>,
     renderer: Box<dyn Renderer>,
+    query_support: bool,
 }
 
 impl Cli {
@@ -111,6 +112,7 @@ impl Cli {
             version: None,
             middlewares: vec![],
             renderer: Box::new(DefaultRenderer),
+            query_support: false,
         }
     }
 
@@ -181,6 +183,44 @@ impl Cli {
         self
     }
 
+    /// Enable agent-discovery query support.
+    ///
+    /// When enabled, the CLI recognises a built-in `query` command:
+    ///
+    /// ```text
+    /// tool query commands            # list all commands as JSON
+    /// tool query <name>              # get structured JSON for a named command
+    /// ```
+    ///
+    /// The `query` command is also injected into the registry so that it
+    /// appears in `--help` output and in [`Registry::iter_all_recursive`].
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use argot::{Cli, Command};
+    ///
+    /// let cli = Cli::new(vec![Command::builder("deploy").build().unwrap()])
+    ///     .with_query_support();
+    /// // Now: `tool query commands` and `tool query deploy` work.
+    /// ```
+    pub fn with_query_support(mut self) -> Self {
+        self.query_support = true;
+        // Inject a meta `query` command so it shows up in --help and iter_all_recursive.
+        let query_cmd = crate::model::Command::builder("query")
+            .summary("Query command metadata (agent discovery)")
+            .description(
+                "Structured JSON output for agent discovery. \
+                 `query commands` lists all commands; `query <name>` returns metadata for one.",
+            )
+            .example(crate::model::Example::new("query commands", "List all commands as JSON"))
+            .example(crate::model::Example::new("query deploy", "Get metadata for the deploy command"))
+            .build()
+            .expect("built-in query command should always build");
+        self.registry.push(query_cmd);
+        self
+    }
+
     /// Parse and dispatch a command from an iterator of string arguments.
     ///
     /// The iterator should **not** include the program name (`argv[0]`).
@@ -222,6 +262,11 @@ impl Cli {
     pub fn run(&self, args: impl IntoIterator<Item = impl AsRef<str>>) -> Result<(), CliError> {
         let argv: Vec<String> = args.into_iter().map(|a| a.as_ref().to_owned()).collect();
         let argv_refs: Vec<&str> = argv.iter().map(String::as_str).collect();
+
+        // ── Built-in: query support ───────────────────────────────────────────
+        if self.query_support && argv_refs.first().copied() == Some("query") {
+            return self.handle_query(&argv_refs[1..]);
+        }
 
         // ── Built-in: --help / -h ──────────────────────────────────────────
         if argv_refs.iter().any(|a| *a == "--help" || *a == "-h") {
@@ -358,6 +403,12 @@ impl Cli {
         let args: Vec<String> = args.into_iter().map(|a| a.as_ref().to_string()).collect();
         let argv: Vec<&str> = args.iter().map(String::as_str).collect();
 
+        // ── Built-in: query support ───────────────────────────────────────────
+        if self.query_support && argv.first().map(|s| *s) == Some("query") {
+            let refs: Vec<&str> = argv.iter().map(|s| *s).collect();
+            return self.handle_query(&refs[1..]);
+        }
+
         // ── Built-in: --help / -h ──────────────────────────────────────────
         if argv.iter().any(|a| *a == "--help" || *a == "-h") {
             let remaining: Vec<&str> = argv
@@ -461,6 +512,47 @@ impl Cli {
     }
 
     // ── Private helpers ───────────────────────────────────────────────────
+
+    fn handle_query(&self, args: &[&str]) -> Result<(), CliError> {
+        match args.first().copied() {
+            // `query commands` → JSON array of all top-level commands
+            None | Some("commands") => {
+                let json = self.registry.to_json().map_err(|e| {
+                    CliError::Handler(
+                        Box::<dyn std::error::Error + Send + Sync>::from(e.to_string()),
+                    )
+                })?;
+                println!("{}", json);
+                Ok(())
+            }
+            // `query <name>` → JSON for the named command
+            Some(name) => {
+                let cmd = self
+                    .registry
+                    .get_command(name)
+                    .or_else(|| {
+                        // Try resolver for prefix/alias matching.
+                        let resolver = crate::resolver::Resolver::new(self.registry.commands());
+                        resolver.resolve(name).ok()
+                    })
+                    .ok_or_else(|| {
+                        CliError::Handler(
+                            Box::<dyn std::error::Error + Send + Sync>::from(format!(
+                                "unknown command: `{}`",
+                                name
+                            )),
+                        )
+                    })?;
+                let json = serde_json::to_string_pretty(cmd).map_err(|e| {
+                    CliError::Handler(
+                        Box::<dyn std::error::Error + Send + Sync>::from(e.to_string()),
+                    )
+                })?;
+                println!("{}", json);
+                Ok(())
+            }
+        }
+    }
 
     /// Walk the arg list and return the help text for the deepest command that
     /// can be resolved. Falls back to the top-level command list if nothing
@@ -708,5 +800,53 @@ mod tests {
 
         let cli = super::Cli::new(vec![cmd]).with_middleware(Aborter);
         assert!(cli.run(["run"]).is_err());
+    }
+
+    #[test]
+    fn test_query_commands_outputs_json() {
+        use crate::model::Command;
+        let cli = super::Cli::new(vec![
+            Command::builder("deploy").summary("Deploy").build().unwrap(),
+            Command::builder("status").summary("Status").build().unwrap(),
+        ])
+        .with_query_support();
+
+        // Should not error (we can't easily capture stdout in unit tests,
+        // but we verify the dispatch path succeeds).
+        assert!(cli.run(["query", "commands"]).is_ok());
+    }
+
+    #[test]
+    fn test_query_named_command_outputs_json() {
+        use crate::model::Command;
+        let cli = super::Cli::new(vec![
+            Command::builder("deploy").summary("Deploy svc").build().unwrap(),
+        ])
+        .with_query_support();
+
+        assert!(cli.run(["query", "deploy"]).is_ok());
+    }
+
+    #[test]
+    fn test_query_unknown_command_errors() {
+        use crate::model::Command;
+        let cli = super::Cli::new(vec![
+            Command::builder("deploy").build().unwrap(),
+        ])
+        .with_query_support();
+
+        assert!(cli.run(["query", "nonexistent"]).is_err());
+    }
+
+    #[test]
+    fn test_query_meta_command_appears_in_registry() {
+        use crate::model::Command;
+        let cli = super::Cli::new(vec![
+            Command::builder("run").build().unwrap(),
+        ])
+        .with_query_support();
+
+        // The injected `query` command should be discoverable.
+        assert!(cli.registry.get_command("query").is_some());
     }
 }

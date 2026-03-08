@@ -124,6 +124,28 @@ Tests should cover:
 - example retrieval
 - command discovery APIs
 - help rendering
-- at least 80% code coverage
+- at least 80% code coverage (enforced by CI via `cargo-tarpaulin`)
 - formatting that passes `rustfmt`
 - lint checks that pass `clippy`
+
+## Test style
+
+Tests use plain `#[test]` functions. Table-driven patterns are implemented as
+parameterized helper functions or loops within a single test function. Adding
+`rstest` is not required.
+
+## Running coverage locally
+
+```bash
+# Install tarpaulin once
+cargo install cargo-tarpaulin
+
+# Run with default features
+cargo tarpaulin --timeout 120 --exclude-files "argot-derive/*" "examples/*"
+
+# Run with all features
+cargo tarpaulin --all-features --timeout 120 --exclude-files "argot-derive/*" "examples/*"
+```
+
+Coverage reports are also generated automatically on every push and pull
+request via `.github/workflows/coverage.yml`.

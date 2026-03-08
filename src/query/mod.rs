@@ -113,6 +113,14 @@ impl Registry {
         Self { commands }
     }
 
+    /// Append a command to the registry.
+    ///
+    /// Used internally by [`crate::Cli::with_query_support`] to inject the
+    /// built-in `query` meta-command.
+    pub(crate) fn push(&mut self, cmd: Command) {
+        self.commands.push(cmd);
+    }
+
     /// Borrow the raw command slice (useful for constructing a [`Parser`][crate::parser::Parser]).
     ///
     /// # Examples

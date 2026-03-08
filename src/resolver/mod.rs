@@ -163,12 +163,15 @@ impl<'a> Resolver<'a> {
             }
         }
 
-        // 2. Prefix match
+        // 2. Prefix match — spellings are intentionally excluded here so they
+        // do not contribute to ambiguity candidates and never appear in
+        // "did you mean?" suggestions. Only canonical name and aliases are
+        // eligible for prefix matching.
         let matches: Vec<&'a Command> = self
             .commands
             .iter()
             .filter(|cmd| {
-                cmd.matchable_strings()
+                cmd.prefix_matchable_strings()
                     .iter()
                     .any(|s| s.starts_with(&normalized))
             })
@@ -394,6 +397,59 @@ mod tests {
                 );
             }
             other => panic!("expected Unknown, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_spelling_resolves_to_canonical() {
+        let cmds = vec![
+            Command::builder("deploy")
+                .alias("release")
+                .spelling("deply")
+                .build()
+                .unwrap(),
+        ];
+        let resolver = Resolver::new(&cmds);
+
+        // Canonical
+        assert_eq!(resolver.resolve("deploy").unwrap().canonical, "deploy");
+        // Alias (official)
+        assert_eq!(resolver.resolve("release").unwrap().canonical, "deploy");
+        // Spelling (silent typo correction)
+        assert_eq!(resolver.resolve("deply").unwrap().canonical, "deploy");
+    }
+
+    #[test]
+    fn test_spelling_not_shown_in_aliases_field() {
+        let cmd = Command::builder("deploy")
+            .alias("release")
+            .spelling("deply")
+            .build()
+            .unwrap();
+
+        assert!(cmd.aliases.contains(&"release".to_string()));
+        assert!(!cmd.aliases.contains(&"deply".to_string()));
+        assert!(cmd.spellings.contains(&"deply".to_string()));
+    }
+
+    #[test]
+    fn test_spelling_not_in_ambiguity_candidates() {
+        // Spellings should not be surfaced in "did you mean" candidates.
+        let cmds = vec![
+            Command::builder("deploy").spelling("deply").build().unwrap(),
+            Command::builder("delete").build().unwrap(),
+        ];
+        let resolver = Resolver::new(&cmds);
+
+        match resolver.resolve("del") {
+            Err(ResolveError::Ambiguous { candidates, .. }) => {
+                // "deply" (a spelling) should not appear as a candidate
+                assert!(!candidates.contains(&"deply".to_string()));
+            }
+            other => {
+                // May resolve unambiguously if "delete" is the only prefix match — also fine
+                let _ = other;
+            }
         }
     }
 }

@@ -553,11 +553,23 @@ impl Command {
         }
     }
 
-    /// All strings this command can be matched by (canonical + aliases + spellings), lowercased.
+    /// All strings this command can be matched by for exact lookup
+    /// (canonical + aliases + spellings), lowercased.
     pub(crate) fn matchable_strings(&self) -> Vec<String> {
         let mut v = vec![self.canonical.to_lowercase()];
         v.extend(self.aliases.iter().map(|s| s.to_lowercase()));
         v.extend(self.spellings.iter().map(|s| s.to_lowercase()));
+        v
+    }
+
+    /// Strings eligible for prefix matching (canonical + aliases only), lowercased.
+    ///
+    /// Spellings are intentionally excluded: they are exact-match-only so they
+    /// do not contribute to prefix ambiguity resolution and never appear in
+    /// "did you mean?" / ambiguous-candidate output.
+    pub(crate) fn prefix_matchable_strings(&self) -> Vec<String> {
+        let mut v = vec![self.canonical.to_lowercase()];
+        v.extend(self.aliases.iter().map(|s| s.to_lowercase()));
         v
     }
 }
@@ -618,15 +630,48 @@ impl CommandBuilder {
 
     /// Replace the entire spelling list with the given collection.
     ///
+    /// Spellings are silent typo-corrections or abbreviated forms that the
+    /// resolver accepts but does **not** advertise in help text. They differ
+    /// from aliases in that they will never appear in the `--help` aliases
+    /// line, and they are excluded from prefix-match ambiguity candidates.
+    ///
     /// To add a single spelling use [`CommandBuilder::spelling`].
     pub fn spellings(mut self, spellings: impl IntoIterator<Item = impl Into<String>>) -> Self {
         self.spellings = spellings.into_iter().map(Into::into).collect();
         self
     }
 
-    /// Append a single alternate spelling.
-    pub fn spelling(mut self, spelling: impl Into<String>) -> Self {
-        self.spellings.push(spelling.into());
+    /// Register a common misspelling or abbreviated form that resolves to this command.
+    ///
+    /// Unlike [`CommandBuilder::alias`], spellings are **not shown in help text**.
+    /// They serve as silent typo-correction or shorthand that resolves
+    /// to the canonical command name without advertising the alternative.
+    ///
+    /// # Difference from `alias`
+    ///
+    /// | Feature | `alias` | `spelling` |
+    /// |---------|---------|------------|
+    /// | Shown in `--help` | Yes | No |
+    /// | Resolver exact match | Yes | Yes |
+    /// | Resolver prefix match | Yes | No |
+    /// | Appears in `aliases` field | Yes | No (goes in `spellings`) |
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use argot::Command;
+    /// let cmd = Command::builder("deploy")
+    ///     .alias("release")           // shown in help: "deploy (release)"
+    ///     .alias("ship")              // shown in help
+    ///     .spelling("deply")          // silent typo correction
+    ///     .spelling("delpoy")         // silent typo correction
+    ///     .build().unwrap();
+    ///
+    /// assert!(cmd.aliases.contains(&"release".to_string()));
+    /// assert!(cmd.spellings.contains(&"deply".to_string()));
+    /// ```
+    pub fn spelling(mut self, s: impl Into<String>) -> Self {
+        self.spellings.push(s.into());
         self
     }
 

@@ -105,8 +105,8 @@ pub use model::AsyncHandlerFn;
 pub use parser::{ParseError, Parser};
 pub use query::{CommandEntry, QueryError, Registry};
 pub use render::{
-    render_ambiguity, render_help, render_markdown, render_resolve_error, render_subcommand_list,
-    DefaultRenderer, Renderer,
+    render_ambiguity, render_completion, render_help, render_json_schema, render_markdown,
+    render_resolve_error, render_subcommand_list, DefaultRenderer, Renderer, Shell,
 };
 pub use resolver::{ResolveError, Resolver};
 
