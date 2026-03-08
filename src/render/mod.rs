@@ -70,10 +70,7 @@ pub fn render_help(command: &Command) -> String {
         out.push_str("ARGUMENTS\n");
         for arg in &command.arguments {
             let req = if arg.required { " (required)" } else { "" };
-            out.push_str(&format!(
-                "    <{}>  {}{}\n",
-                arg.name, arg.description, req
-            ));
+            out.push_str(&format!("    <{}>  {}{}\n", arg.name, arg.description, req));
         }
         out.push('\n');
     }
@@ -81,10 +78,7 @@ pub fn render_help(command: &Command) -> String {
     if !command.flags.is_empty() {
         out.push_str("FLAGS\n");
         for flag in &command.flags {
-            let short_part = flag
-                .short
-                .map(|c| format!("-{}, ", c))
-                .unwrap_or_default();
+            let short_part = flag.short.map(|c| format!("-{}, ", c)).unwrap_or_default();
             let req = if flag.required { " (required)" } else { "" };
             out.push_str(&format!(
                 "    {}--{}  {}{}\n",
@@ -203,7 +197,10 @@ pub fn render_markdown(command: &Command) -> String {
         out.push_str(&format!("## Description\n\n{}\n\n", command.description));
     }
 
-    out.push_str(&format!("## Usage\n\n```\n{}\n```\n\n", build_usage(command)));
+    out.push_str(&format!(
+        "## Usage\n\n```\n{}\n```\n\n",
+        build_usage(command)
+    ));
 
     if !command.arguments.is_empty() {
         out.push_str("## Arguments\n\n");
@@ -223,10 +220,7 @@ pub fn render_markdown(command: &Command) -> String {
         out.push_str("| Flag | Short | Description | Required |\n");
         out.push_str("|------|-------|-------------|----------|\n");
         for flag in &command.flags {
-            let short = flag
-                .short
-                .map(|c| format!("`-{}`", c))
-                .unwrap_or_default();
+            let short = flag.short.map(|c| format!("`-{}`", c)).unwrap_or_default();
             out.push_str(&format!(
                 "| `--{}` | {} | {} | {} |\n",
                 flag.name, short, flag.description, flag.required
@@ -346,7 +340,12 @@ mod tests {
                     .build()
                     .unwrap(),
             )
-            .subcommand(Command::builder("rollback").summary("Roll back").build().unwrap())
+            .subcommand(
+                Command::builder("rollback")
+                    .summary("Roll back")
+                    .build()
+                    .unwrap(),
+            )
             .example(Example::new("deploy to prod", "deploy prod").with_output("deployed"))
             .best_practice("always dry-run first")
             .anti_pattern("deploy on Friday")
@@ -372,7 +371,10 @@ mod tests {
 
     #[test]
     fn test_render_help_omits_empty_sections() {
-        let cmd = Command::builder("simple").summary("Simple").build().unwrap();
+        let cmd = Command::builder("simple")
+            .summary("Simple")
+            .build()
+            .unwrap();
         let help = render_help(&cmd);
         assert!(!help.contains("ARGUMENTS"));
         assert!(!help.contains("FLAGS"));

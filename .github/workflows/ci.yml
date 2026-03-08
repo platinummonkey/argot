@@ -66,10 +66,19 @@ jobs:
       - name: Cache dependencies
         uses: Swatinem/rust-cache@v2
 
-      - name: Build
+      - name: Build (all features)
         run: cargo build --all-features
 
-      - name: Run tests
+      - name: Build (no default features)
+        run: cargo build --no-default-features
+
+      - name: Run tests (no features)
+        run: cargo test
+
+      - name: Run tests (fuzzy feature)
+        run: cargo test --features fuzzy
+
+      - name: Run tests (all features)
         run: cargo test --all-features
 
   msrv:

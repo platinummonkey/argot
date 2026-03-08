@@ -210,20 +210,29 @@ impl Cli {
                             // Wrap in a Send+Sync-compatible error by capturing
                             // the display string.
                             let msg = e.to_string();
-                            let boxed: Box<dyn std::error::Error + Send + Sync> =
-                                msg.into();
+                            let boxed: Box<dyn std::error::Error + Send + Sync> = msg.into();
                             CliError::Handler(boxed)
                         })
                     }
                     None => Err(CliError::NoHandler(parsed.command.canonical.to_string())),
                 }
             }
-            Err(e) => {
-                eprintln!("error: {}", e);
+            Err(parse_err) => {
+                eprintln!("error: {}", parse_err);
+                if let crate::parser::ParseError::Resolve(
+                    crate::resolver::ResolveError::Unknown {
+                        ref suggestions, ..
+                    },
+                ) = parse_err
+                {
+                    if !suggestions.is_empty() {
+                        eprintln!("Did you mean one of: {}", suggestions.join(", "));
+                    }
+                }
                 // Best-effort: render help for whatever partial command we can resolve.
                 let help_text = self.resolve_help_text(&argv_refs);
                 eprint!("{}", help_text);
-                Err(CliError::Parse(e))
+                Err(CliError::Parse(parse_err))
             }
         }
     }
@@ -299,9 +308,7 @@ mod tests {
             .summary("Say hello")
             .build()
             .unwrap();
-        Cli::new(vec![cmd])
-            .app_name("testapp")
-            .version("1.2.3")
+        Cli::new(vec![cmd]).app_name("testapp").version("1.2.3")
     }
 
     fn make_cli_with_handler(called: Arc<Mutex<bool>>) -> Cli {
@@ -313,9 +320,7 @@ mod tests {
             }))
             .build()
             .unwrap();
-        Cli::new(vec![cmd])
-            .app_name("testapp")
-            .version("1.2.3")
+        Cli::new(vec![cmd]).app_name("testapp").version("1.2.3")
     }
 
     #[test]

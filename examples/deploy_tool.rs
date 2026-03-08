@@ -8,7 +8,9 @@
 
 use std::sync::Arc;
 
-use argot::{Argument, Command, Example, Flag, Parser, Registry, render_help, render_subcommand_list};
+use argot::{
+    render_help, render_subcommand_list, Argument, Command, Example, Flag, Parser, Registry,
+};
 
 fn build_registry() -> Registry {
     // --- deploy ---
@@ -53,11 +55,8 @@ fn build_registry() -> Registry {
             "deploy_tool deploy staging",
         ))
         .example(
-            Example::new(
-                "dry-run to production",
-                "deploy_tool deploy prod --dry-run",
-            )
-            .with_output("[DRY RUN] Would deploy to prod using rolling strategy"),
+            Example::new("dry-run to production", "deploy_tool deploy prod --dry-run")
+                .with_output("[DRY RUN] Would deploy to prod using rolling strategy"),
         )
         .example(Example::new(
             "canary deploy with timeout",
@@ -82,7 +81,10 @@ fn build_registry() -> Registry {
             let timeout = parsed.flags.get("timeout").map(String::as_str);
 
             if dry_run {
-                println!("[DRY RUN] Would deploy to {} using {} strategy", env, strategy);
+                println!(
+                    "[DRY RUN] Would deploy to {} using {} strategy",
+                    env, strategy
+                );
                 if let Some(t) = timeout {
                     println!("[DRY RUN] Timeout would be set to {}s", t);
                 }
@@ -137,11 +139,7 @@ fn build_registry() -> Registry {
                 .get("environment")
                 .map(String::as_str)
                 .unwrap_or("unknown");
-            let reason = parsed
-                .flags
-                .get("reason")
-                .map(String::as_str)
-                .unwrap_or("");
+            let reason = parsed.flags.get("reason").map(String::as_str).unwrap_or("");
 
             println!("Rolling back {}...", env);
             println!("Reason: {}", reason);

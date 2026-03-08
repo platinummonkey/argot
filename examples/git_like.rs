@@ -9,7 +9,9 @@
 
 use std::sync::Arc;
 
-use argot::{Argument, Command, Example, Flag, Parser, Registry, render_help, render_subcommand_list};
+use argot::{
+    render_help, render_subcommand_list, Argument, Command, Example, Flag, Parser, Registry,
+};
 
 fn build_registry() -> Registry {
     // --- clone ---
@@ -92,7 +94,11 @@ fn build_registry() -> Registry {
             "git_like commit -m \"fix bug\" --all",
         ))
         .handler(Arc::new(|parsed| {
-            let msg = parsed.flags.get("message").map(String::as_str).unwrap_or("");
+            let msg = parsed
+                .flags
+                .get("message")
+                .map(String::as_str)
+                .unwrap_or("");
             let all = parsed.flags.get("all").map(String::as_str) == Some("true");
             if all {
                 println!("[main] Staging all modified files...");
@@ -179,8 +185,14 @@ fn build_registry() -> Registry {
                 .build()
                 .unwrap(),
         )
-        .example(Example::new("remove origin", "git_like remote remove origin"))
-        .example(Example::new("remove via alias", "git_like remote rm upstream"))
+        .example(Example::new(
+            "remove origin",
+            "git_like remote remove origin",
+        ))
+        .example(Example::new(
+            "remove via alias",
+            "git_like remote rm upstream",
+        ))
         .handler(Arc::new(|parsed| {
             let name = parsed.args.get("name").map(String::as_str).unwrap_or("");
             println!("Removed remote '{}'", name);
@@ -207,10 +219,7 @@ fn build_registry() -> Registry {
         .subcommand(remote_add)
         .subcommand(remote_remove)
         .subcommand(remote_list)
-        .example(Example::new(
-            "list remotes",
-            "git_like remote list",
-        ))
+        .example(Example::new("list remotes", "git_like remote list"))
         .build()
         .unwrap();
 

@@ -35,6 +35,8 @@ pub struct Argument {
     pub required: bool,
     /// Value substituted when the argument is not provided (optional arguments only).
     pub default: Option<String>,
+    /// Whether this argument consumes all remaining tokens (must be the last argument).
+    pub variadic: bool,
 }
 
 /// Consuming builder for [`Argument`].
@@ -59,6 +61,7 @@ pub struct ArgumentBuilder {
     description: String,
     required: bool,
     default: Option<String>,
+    variadic: bool,
 }
 
 impl Argument {
@@ -82,6 +85,7 @@ impl Argument {
             description: String::new(),
             required: false,
             default: None,
+            variadic: false,
         }
     }
 }
@@ -112,6 +116,17 @@ impl ArgumentBuilder {
         self
     }
 
+    /// Mark this argument as variadic (consumes all remaining tokens).
+    ///
+    /// A variadic argument must be the last argument defined on the command.
+    /// [`CommandBuilder::build`] enforces this constraint and returns
+    /// [`crate::BuildError::VariadicNotLast`] if a variadic argument is
+    /// followed by another argument.
+    pub fn variadic(mut self) -> Self {
+        self.variadic = true;
+        self
+    }
+
     /// Consume the builder and return an [`Argument`].
     ///
     /// # Errors
@@ -135,6 +150,7 @@ impl ArgumentBuilder {
             description: self.description,
             required: self.required,
             default: self.default,
+            variadic: self.variadic,
         })
     }
 }
@@ -153,10 +169,30 @@ mod tests {
     #[test]
     fn test_builder() {
         let cases = vec![
-            TestCase { name: "happy path", arg_name: "file", required: false, expect_err: false },
-            TestCase { name: "required", arg_name: "file", required: true, expect_err: false },
-            TestCase { name: "empty name", arg_name: "", required: false, expect_err: true },
-            TestCase { name: "whitespace name", arg_name: "   ", required: false, expect_err: true },
+            TestCase {
+                name: "happy path",
+                arg_name: "file",
+                required: false,
+                expect_err: false,
+            },
+            TestCase {
+                name: "required",
+                arg_name: "file",
+                required: true,
+                expect_err: false,
+            },
+            TestCase {
+                name: "empty name",
+                arg_name: "",
+                required: false,
+                expect_err: true,
+            },
+            TestCase {
+                name: "whitespace name",
+                arg_name: "   ",
+                required: false,
+                expect_err: true,
+            },
         ];
 
         for tc in cases {

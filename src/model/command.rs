@@ -23,9 +23,8 @@ use super::{Argument, BuildError, Example, Flag};
 ///     Ok(())
 /// });
 /// ```
-pub type HandlerFn = Arc<
-    dyn for<'a> Fn(&ParsedCommand<'a>) -> Result<(), Box<dyn std::error::Error>> + Send + Sync,
->;
+pub type HandlerFn =
+    Arc<dyn for<'a> Fn(&ParsedCommand<'a>) -> Result<(), Box<dyn std::error::Error>> + Send + Sync>;
 
 /// The result of successfully parsing an invocation against a [`Command`].
 ///
@@ -357,8 +356,20 @@ impl CommandBuilder {
     ///
     /// # Errors
     ///
-    /// Returns [`BuildError::EmptyCanonical`] if the canonical name is empty
-    /// or consists entirely of whitespace.
+    /// - [`BuildError::EmptyCanonical`] — canonical name is empty or whitespace.
+    /// - [`BuildError::AliasEqualsCanonical`] — an alias is identical to the
+    ///   canonical name (case-insensitive).
+    /// - [`BuildError::DuplicateAlias`] — two aliases share the same string
+    ///   (case-insensitive comparison).
+    /// - [`BuildError::DuplicateFlagName`] — two flags share the same long name.
+    /// - [`BuildError::DuplicateShortFlag`] — two flags share the same short
+    ///   character.
+    /// - [`BuildError::DuplicateArgumentName`] — two positional arguments share
+    ///   the same name.
+    /// - [`BuildError::DuplicateSubcommandName`] — two subcommands share the
+    ///   same canonical name.
+    /// - [`BuildError::VariadicNotLast`] — a variadic argument is not the last
+    ///   argument in the list.
     ///
     /// # Examples
     ///
@@ -371,6 +382,65 @@ impl CommandBuilder {
         if self.canonical.trim().is_empty() {
             return Err(BuildError::EmptyCanonical);
         }
+
+        // 1. Alias equals canonical
+        let canonical_lower = self.canonical.to_lowercase();
+        for alias in &self.aliases {
+            if alias.to_lowercase() == canonical_lower {
+                return Err(BuildError::AliasEqualsCanonical(alias.clone()));
+            }
+        }
+
+        // 2. Duplicate aliases
+        let mut seen_aliases = std::collections::HashSet::new();
+        for alias in &self.aliases {
+            let key = alias.to_lowercase();
+            if !seen_aliases.insert(key) {
+                return Err(BuildError::DuplicateAlias(alias.clone()));
+            }
+        }
+
+        // 3. Duplicate flag names (long)
+        let mut seen_flag_names = std::collections::HashSet::new();
+        for flag in &self.flags {
+            if !seen_flag_names.insert(flag.name.clone()) {
+                return Err(BuildError::DuplicateFlagName(flag.name.clone()));
+            }
+        }
+
+        // 4. Duplicate short flags
+        let mut seen_short_flags = std::collections::HashSet::new();
+        for flag in &self.flags {
+            if let Some(c) = flag.short {
+                if !seen_short_flags.insert(c) {
+                    return Err(BuildError::DuplicateShortFlag(c));
+                }
+            }
+        }
+
+        // 5. Duplicate argument names
+        let mut seen_arg_names = std::collections::HashSet::new();
+        for arg in &self.arguments {
+            if !seen_arg_names.insert(arg.name.clone()) {
+                return Err(BuildError::DuplicateArgumentName(arg.name.clone()));
+            }
+        }
+
+        // 6. Duplicate subcommand canonical names
+        let mut seen_sub_names = std::collections::HashSet::new();
+        for sub in &self.subcommands {
+            if !seen_sub_names.insert(sub.canonical.clone()) {
+                return Err(BuildError::DuplicateSubcommandName(sub.canonical.clone()));
+            }
+        }
+
+        // 7. Variadic argument must be last
+        for (i, arg) in self.arguments.iter().enumerate() {
+            if arg.variadic && i != self.arguments.len() - 1 {
+                return Err(BuildError::VariadicNotLast(arg.name.clone()));
+            }
+        }
+
         Ok(Command {
             canonical: self.canonical,
             aliases: self.aliases,
@@ -487,5 +557,81 @@ mod tests {
             cmd.handler.as_ref().unwrap(),
             cmd2.handler.as_ref().unwrap()
         ));
+    }
+
+    #[test]
+    fn test_duplicate_alias_rejected() {
+        let err = Command::builder("cmd")
+            .alias("a")
+            .alias("a")
+            .build()
+            .unwrap_err();
+        assert!(matches!(err, BuildError::DuplicateAlias(_)));
+    }
+
+    #[test]
+    fn test_alias_equals_canonical_rejected() {
+        let err = Command::builder("deploy")
+            .alias("deploy")
+            .build()
+            .unwrap_err();
+        assert!(matches!(err, BuildError::AliasEqualsCanonical(_)));
+    }
+
+    #[test]
+    fn test_duplicate_flag_name_rejected() {
+        let flag = Flag::builder("verbose").build().unwrap();
+        let err = Command::builder("cmd")
+            .flag(flag.clone())
+            .flag(flag)
+            .build()
+            .unwrap_err();
+        assert!(matches!(err, BuildError::DuplicateFlagName(_)));
+    }
+
+    #[test]
+    fn test_duplicate_short_flag_rejected() {
+        let f1 = Flag::builder("verbose").short('v').build().unwrap();
+        let f2 = Flag::builder("version").short('v').build().unwrap();
+        let err = Command::builder("cmd")
+            .flag(f1)
+            .flag(f2)
+            .build()
+            .unwrap_err();
+        assert!(matches!(err, BuildError::DuplicateShortFlag('v')));
+    }
+
+    #[test]
+    fn test_duplicate_argument_name_rejected() {
+        let arg = Argument::builder("env").build().unwrap();
+        let err = Command::builder("cmd")
+            .argument(arg.clone())
+            .argument(arg)
+            .build()
+            .unwrap_err();
+        assert!(matches!(err, BuildError::DuplicateArgumentName(_)));
+    }
+
+    #[test]
+    fn test_duplicate_subcommand_name_rejected() {
+        let sub = Command::builder("add").build().unwrap();
+        let err = Command::builder("remote")
+            .subcommand(sub.clone())
+            .subcommand(sub)
+            .build()
+            .unwrap_err();
+        assert!(matches!(err, BuildError::DuplicateSubcommandName(_)));
+    }
+
+    #[test]
+    fn test_variadic_must_be_last() {
+        let variadic = Argument::builder("files").variadic().build().unwrap();
+        let after = Argument::builder("extra").build().unwrap();
+        let err = Command::builder("cmd")
+            .argument(variadic)
+            .argument(after)
+            .build()
+            .unwrap_err();
+        assert!(matches!(err, BuildError::VariadicNotLast(_)));
     }
 }

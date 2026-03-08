@@ -14,12 +14,17 @@
 //!    A word that fails to resolve is treated as the start of positional
 //!    arguments rather than an error.
 //!
-//! 3. **Flag and argument binding** — remaining tokens are bound: long and
-//!    short flag tokens are matched against the resolved command's flag
-//!    definitions; plain word tokens are accumulated as positional arguments.
-//!    After all tokens are consumed, positional arguments are bound by
-//!    declaration order; required flags and arguments are validated; and
-//!    defaults are applied.
+//! 3. **Flag and argument binding** — remaining tokens are bound using a
+//!    queue-based loop: long and short flag tokens are matched against the
+//!    resolved command's flag definitions; plain word tokens are accumulated
+//!    as positional arguments. Adjacent short flags (`-abc`) are expanded
+//!    inline: each boolean flag in the run registers `"true"` and the
+//!    remaining characters are re-queued as a new `ShortFlag` token.
+//!    Boolean flags also support `--no-{name}` negation syntax, which sets
+//!    the value to `"false"`. After all tokens are consumed, positional
+//!    arguments are bound by declaration order (variadic last arguments
+//!    collect all remaining positionals into a JSON array); required flags
+//!    and arguments are validated; and defaults are applied.
 //!
 //! # Example
 //!
@@ -42,7 +47,7 @@
 
 mod tokenizer;
 
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 
 use thiserror::Error;
 
@@ -88,7 +93,9 @@ pub enum ParseError {
     /// command.
     ///
     /// The inner `String` includes the leading dashes, e.g. `"--foo"` or
-    /// `"-x"`.
+    /// `"-x"`. This variant is also raised when `--no-{name}` negation syntax
+    /// is used with an unknown flag name or with a value-taking flag (which
+    /// cannot be negated).
     #[error("unknown flag: {0}")]
     UnknownFlag(String),
     /// A word token following a subcommand-only parent did not match any
@@ -219,13 +226,11 @@ impl<'a> Parser<'a> {
                         }
                         Err(e) => match e {
                             // Ambiguous is always a user error — propagate it.
-                            ResolveError::Ambiguous { .. } => {
-                                return Err(ParseError::Resolve(e))
-                            }
+                            ResolveError::Ambiguous { .. } => return Err(ParseError::Resolve(e)),
                             // Unknown: propagate only when the parent has no
                             // positional arguments (nowhere legitimate for the
                             // word to land). Otherwise break and treat as positional.
-                            ResolveError::Unknown(_) => {
+                            ResolveError::Unknown { .. } => {
                                 if cmd.arguments.is_empty() {
                                     return Err(ParseError::UnknownSubcommand {
                                         parent: cmd.canonical.clone(),
@@ -234,7 +239,7 @@ impl<'a> Parser<'a> {
                                 }
                                 break;
                             }
-                        }
+                        },
                     }
                 }
                 _ => break,
@@ -242,63 +247,49 @@ impl<'a> Parser<'a> {
         }
 
         // Process remaining tokens: flags and positional arguments.
+        // Uses a queue so that adjacent short flags (-abc) can push synthetic
+        // ShortFlag tokens back to the front for processing.
         let mut positionals: Vec<String> = Vec::new();
         let mut flags: HashMap<String, String> = HashMap::new();
 
-        while pos < tokens.len() {
-            match &tokens[pos] {
+        let mut queue: VecDeque<Token> = tokens[pos..].iter().cloned().collect();
+
+        while let Some(token) = queue.pop_front() {
+            match token {
                 Token::Separator => {
                     // Everything after -- is a positional word (tokenizer already
                     // converts post-separator args to Token::Word, so this is a
                     // no-op guard for the separator token itself).
-                    pos += 1;
                 }
                 Token::Word(w) => {
-                    positionals.push(w.clone());
-                    pos += 1;
+                    positionals.push(w);
                 }
                 Token::LongFlag { name, value } => {
+                    // Check --no-{name} negation for boolean flags.
+                    if let Some(base) = name.strip_prefix("no-") {
+                        if let Some(flag_def) =
+                            cmd.flags.iter().find(|f| f.name == base && !f.takes_value)
+                        {
+                            if value.is_some() {
+                                return Err(ParseError::UnknownFlag(format!("--{}", name)));
+                            }
+                            flags.insert(flag_def.name.clone(), "false".to_string());
+                            continue;
+                        }
+                    }
+
                     let flag_def = cmd
                         .flags
                         .iter()
-                        .find(|f| &f.name == name)
+                        .find(|f| f.name == name)
                         .ok_or_else(|| ParseError::UnknownFlag(format!("--{}", name)))?;
 
                     let val = if flag_def.takes_value {
                         if let Some(v) = value {
-                            v.clone()
+                            v
                         } else {
-                            pos += 1;
-                            match tokens.get(pos) {
-                                Some(Token::Word(w)) => w.clone(),
-                                _ => {
-                                    return Err(ParseError::FlagMissingValue {
-                                        name: name.clone(),
-                                    })
-                                }
-                            }
-                        }
-                    } else {
-                        "true".to_string()
-                    };
-
-                    flags.insert(flag_def.name.clone(), val);
-                    pos += 1;
-                }
-                Token::ShortFlag { name: c, value } => {
-                    let flag_def = cmd
-                        .flags
-                        .iter()
-                        .find(|f| f.short == Some(*c))
-                        .ok_or_else(|| ParseError::UnknownFlag(format!("-{}", c)))?;
-
-                    let val = if flag_def.takes_value {
-                        if let Some(v) = value {
-                            v.clone()
-                        } else {
-                            pos += 1;
-                            match tokens.get(pos) {
-                                Some(Token::Word(w)) => w.clone(),
+                            match queue.pop_front() {
+                                Some(Token::Word(w)) => w,
                                 _ => {
                                     return Err(ParseError::FlagMissingValue {
                                         name: flag_def.name.clone(),
@@ -311,7 +302,47 @@ impl<'a> Parser<'a> {
                     };
 
                     flags.insert(flag_def.name.clone(), val);
-                    pos += 1;
+                }
+                Token::ShortFlag { name: c, value } => {
+                    let flag_def = cmd
+                        .flags
+                        .iter()
+                        .find(|f| f.short == Some(c))
+                        .ok_or_else(|| ParseError::UnknownFlag(format!("-{}", c)))?;
+
+                    if flag_def.takes_value {
+                        let val = if let Some(v) = value {
+                            v
+                        } else {
+                            match queue.pop_front() {
+                                Some(Token::Word(w)) => w,
+                                _ => {
+                                    return Err(ParseError::FlagMissingValue {
+                                        name: flag_def.name.clone(),
+                                    })
+                                }
+                            }
+                        };
+                        flags.insert(flag_def.name.clone(), val);
+                    } else {
+                        // Boolean flag: register as true and expand remaining chars.
+                        flags.insert(flag_def.name.clone(), "true".to_string());
+                        if let Some(rest) = value {
+                            if !rest.is_empty() {
+                                let mut chars = rest.chars();
+                                let next_c = chars.next().unwrap();
+                                let remainder: String = chars.collect();
+                                queue.push_front(Token::ShortFlag {
+                                    name: next_c,
+                                    value: if remainder.is_empty() {
+                                        None
+                                    } else {
+                                        Some(remainder)
+                                    },
+                                });
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -319,6 +350,22 @@ impl<'a> Parser<'a> {
         // Bind positional arguments to declared argument slots.
         let mut args: HashMap<String, String> = HashMap::new();
         for (i, arg_def) in cmd.arguments.iter().enumerate() {
+            if arg_def.variadic {
+                // Collect all remaining positionals into a JSON array string.
+                let values: Vec<&String> = positionals[i..].iter().collect();
+                if values.is_empty() && arg_def.required {
+                    return Err(ParseError::MissingArgument(arg_def.name.clone()));
+                } else if !values.is_empty() {
+                    let json_val = serde_json::to_string(
+                        &values.iter().map(|s| s.as_str()).collect::<Vec<_>>(),
+                    )
+                    .unwrap();
+                    args.insert(arg_def.name.clone(), json_val);
+                } else if let Some(default) = &arg_def.default {
+                    args.insert(arg_def.name.clone(), default.clone());
+                }
+                break; // variadic is always last
+            }
             if let Some(val) = positionals.get(i) {
                 args.insert(arg_def.name.clone(), val.clone());
             } else if arg_def.required {
@@ -328,7 +375,9 @@ impl<'a> Parser<'a> {
             }
         }
 
-        if positionals.len() > cmd.arguments.len() {
+        // Only error on unexpected positionals if the last argument is NOT variadic.
+        let last_is_variadic = cmd.arguments.last().map(|a| a.variadic).unwrap_or(false);
+        if positionals.len() > cmd.arguments.len() && !last_is_variadic {
             return Err(ParseError::UnexpectedArgument(
                 positionals[cmd.arguments.len()].clone(),
             ));
@@ -346,7 +395,11 @@ impl<'a> Parser<'a> {
             }
         }
 
-        Ok(ParsedCommand { command: cmd, args, flags })
+        Ok(ParsedCommand {
+            command: cmd,
+            args,
+            flags,
+        })
     }
 }
 
@@ -574,7 +627,8 @@ mod tests {
             if tc.expect_err {
                 assert!(result.is_err(), "case '{}': expected error", tc.name);
             } else {
-                let parsed = result.unwrap_or_else(|e| panic!("case '{}': unexpected error: {}", tc.name, e));
+                let parsed = result
+                    .unwrap_or_else(|e| panic!("case '{}': unexpected error: {}", tc.name, e));
                 assert_eq!(
                     parsed.command.canonical,
                     tc.expected_canonical.unwrap(),
@@ -646,12 +700,7 @@ mod tests {
     #[test]
     fn test_flag_missing_value() {
         let cmds = vec![Command::builder("build")
-            .flag(
-                Flag::builder("target")
-                    .takes_value()
-                    .build()
-                    .unwrap(),
-            )
+            .flag(Flag::builder("target").takes_value().build().unwrap())
             .build()
             .unwrap()];
         let parser = Parser::new(&cmds);
@@ -673,7 +722,10 @@ mod tests {
         let parser = Parser::new(&cmds);
         let result = parser.parse(&["git", "f"]);
         assert!(
-            matches!(result, Err(ParseError::Resolve(ResolveError::Ambiguous { .. }))),
+            matches!(
+                result,
+                Err(ParseError::Resolve(ResolveError::Ambiguous { .. }))
+            ),
             "expected Resolve(Ambiguous), got {:?}",
             result
         );
@@ -710,6 +762,174 @@ mod tests {
         assert!(result.is_ok(), "expected Ok, got {:?}", result);
         let parsed = result.unwrap();
         assert_eq!(parsed.command.canonical, "deploy");
-        assert_eq!(parsed.args.get("target").map(String::as_str), Some("staging"));
+        assert_eq!(
+            parsed.args.get("target").map(String::as_str),
+            Some("staging")
+        );
+    }
+
+    // -----------------------------------------------------------------------
+    // Enhancement 1: Adjacent short flags (-abc → -a -b -c)
+    // -----------------------------------------------------------------------
+
+    fn build_multi_flag_command() -> Vec<Command> {
+        vec![Command::builder("cmd")
+            .flag(Flag::builder("verbose").short('v').build().unwrap())
+            .flag(Flag::builder("no-wait").short('n').build().unwrap())
+            .flag(
+                Flag::builder("output")
+                    .short('o')
+                    .takes_value()
+                    .default_value("text")
+                    .build()
+                    .unwrap(),
+            )
+            .build()
+            .unwrap()]
+    }
+
+    #[test]
+    fn test_adjacent_short_flags() {
+        let cmds = build_multi_flag_command();
+        let parser = Parser::new(&cmds);
+
+        // -vo json: -v is boolean (→ verbose=true), -o takes a value (→ output=json)
+        let result = parser.parse(&["cmd", "-vo", "json"]);
+        assert!(result.is_ok(), "expected Ok, got {:?}", result);
+        let parsed = result.unwrap();
+        assert_eq!(
+            parsed.flags.get("verbose").map(String::as_str),
+            Some("true")
+        );
+        assert_eq!(parsed.flags.get("output").map(String::as_str), Some("json"));
+
+        // -vn: both boolean flags → verbose=true, no-wait=true
+        let result2 = parser.parse(&["cmd", "-vn"]);
+        assert!(result2.is_ok(), "expected Ok, got {:?}", result2);
+        let parsed2 = result2.unwrap();
+        assert_eq!(
+            parsed2.flags.get("verbose").map(String::as_str),
+            Some("true")
+        );
+        assert_eq!(
+            parsed2.flags.get("no-wait").map(String::as_str),
+            Some("true")
+        );
+    }
+
+    #[test]
+    fn test_adjacent_short_flags_with_value() {
+        let cmds = build_multi_flag_command();
+        let parser = Parser::new(&cmds);
+
+        // -ofile.txt: -o takes_value, so "file.txt" is the inline value
+        let result = parser.parse(&["cmd", "-ofile.txt"]);
+        assert!(result.is_ok(), "expected Ok, got {:?}", result);
+        let parsed = result.unwrap();
+        assert_eq!(
+            parsed.flags.get("output").map(String::as_str),
+            Some("file.txt")
+        );
+    }
+
+    // -----------------------------------------------------------------------
+    // Enhancement 2: --no-flag negation
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_flag_negation() {
+        let cmds = vec![Command::builder("cmd")
+            .flag(Flag::builder("verbose").short('v').build().unwrap())
+            .build()
+            .unwrap()];
+        let parser = Parser::new(&cmds);
+
+        let result = parser.parse(&["cmd", "--no-verbose"]);
+        assert!(result.is_ok(), "expected Ok, got {:?}", result);
+        let parsed = result.unwrap();
+        assert_eq!(
+            parsed.flags.get("verbose").map(String::as_str),
+            Some("false")
+        );
+    }
+
+    #[test]
+    fn test_flag_negation_unknown() {
+        let cmds = vec![Command::builder("cmd")
+            .flag(Flag::builder("verbose").short('v').build().unwrap())
+            .build()
+            .unwrap()];
+        let parser = Parser::new(&cmds);
+
+        // --no-nonexistent should return UnknownFlag
+        let result = parser.parse(&["cmd", "--no-nonexistent"]);
+        assert!(
+            matches!(result, Err(ParseError::UnknownFlag(_))),
+            "expected UnknownFlag, got {:?}",
+            result
+        );
+    }
+
+    // -----------------------------------------------------------------------
+    // Enhancement 3: Variadic arguments
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_variadic_argument() {
+        let cmds = vec![Command::builder("cmd")
+            .argument(Argument::builder("files").variadic().build().unwrap())
+            .build()
+            .unwrap()];
+        let parser = Parser::new(&cmds);
+
+        let result = parser.parse(&["cmd", "a", "b", "c"]);
+        assert!(result.is_ok(), "expected Ok, got {:?}", result);
+        let parsed = result.unwrap();
+        let raw = parsed.args.get("files").expect("files key missing");
+        let values: Vec<String> = serde_json::from_str(raw).expect("not valid JSON array");
+        assert_eq!(values, vec!["a", "b", "c"]);
+    }
+
+    #[test]
+    fn test_variadic_argument_required_empty() {
+        let cmds = vec![Command::builder("cmd")
+            .argument(
+                Argument::builder("files")
+                    .required()
+                    .variadic()
+                    .build()
+                    .unwrap(),
+            )
+            .build()
+            .unwrap()];
+        let parser = Parser::new(&cmds);
+
+        let result = parser.parse(&["cmd"]);
+        assert!(
+            matches!(result, Err(ParseError::MissingArgument(ref s)) if s == "files"),
+            "expected MissingArgument(files), got {:?}",
+            result
+        );
+    }
+
+    #[test]
+    fn test_variadic_argument_default() {
+        let cmds = vec![Command::builder("cmd")
+            .argument(
+                Argument::builder("files")
+                    .default_value("[]")
+                    .variadic()
+                    .build()
+                    .unwrap(),
+            )
+            .build()
+            .unwrap()];
+        let parser = Parser::new(&cmds);
+
+        // No positionals provided → default applies
+        let result = parser.parse(&["cmd"]);
+        assert!(result.is_ok(), "expected Ok, got {:?}", result);
+        let parsed = result.unwrap();
+        assert_eq!(parsed.args.get("files").map(String::as_str), Some("[]"));
     }
 }

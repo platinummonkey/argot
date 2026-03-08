@@ -180,7 +180,11 @@ fn parse_field_attrs(attrs: &[syn::Attribute]) -> syn::Result<Option<FieldAttrs>
             Ok(())
         })?;
     }
-    if found { Ok(Some(out)) } else { Ok(None) }
+    if found {
+        Ok(Some(out))
+    } else {
+        Ok(None)
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -299,8 +303,7 @@ fn derive_impl(input: DeriveInput) -> syn::Result<TokenStream2> {
             if let Some(ref def) = fa.default {
                 flag_builder = quote! { #flag_builder .default_value(#def) };
             }
-            builder_tokens =
-                quote! { #builder_tokens .flag(#flag_builder .build().unwrap()) };
+            builder_tokens = quote! { #builder_tokens .flag(#flag_builder .build().unwrap()) };
         } else {
             return Err(syn::Error::new_spanned(
                 field_ident,

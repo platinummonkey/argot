@@ -10,7 +10,7 @@
 //! - **[`Registry::search`]** — case-insensitive substring search across
 //!   canonical name, summary, and description.
 //! - **[`Registry::fuzzy_search`]** — fuzzy (skim) search returning results
-//!   sorted by score (best match first).
+//!   sorted by score (best match first). Requires the `fuzzy` feature.
 //! - **[`Registry::to_json`]** — serialize the command tree to pretty-printed
 //!   JSON (handler closures are excluded).
 //!
@@ -30,7 +30,9 @@
 //! assert_eq!(registry.search("item").len(), 2);
 //! ```
 
+#[cfg(feature = "fuzzy")]
 use fuzzy_matcher::skim::SkimMatcherV2;
+#[cfg(feature = "fuzzy")]
 use fuzzy_matcher::FuzzyMatcher;
 use thiserror::Error;
 
@@ -250,9 +252,9 @@ impl Registry {
 
     /// Fuzzy search across canonical name, summary, and description.
     ///
-    /// Uses the skim fuzzy-matching algorithm. Returns matches sorted
-    /// descending by score (best match first). Commands that produce no fuzzy
-    /// match are excluded.
+    /// Uses the skim fuzzy-matching algorithm (requires the `fuzzy` feature).
+    /// Returns matches sorted descending by score (best match first).
+    /// Commands that produce no fuzzy match are excluded.
     ///
     /// # Arguments
     ///
@@ -261,6 +263,7 @@ impl Registry {
     /// # Examples
     ///
     /// ```
+    /// # #[cfg(feature = "fuzzy")] {
     /// # use argot::{Command, Registry};
     /// let registry = Registry::new(vec![
     ///     Command::builder("list").summary("List all items").build().unwrap(),
@@ -273,7 +276,9 @@ impl Registry {
     /// for window in results.windows(2) {
     ///     assert!(window[0].1 >= window[1].1);
     /// }
+    /// # }
     /// ```
+    #[cfg(feature = "fuzzy")]
     pub fn fuzzy_search(&self, query: &str) -> Vec<(&Command, i64)> {
         let matcher = SkimMatcherV2::default();
         let mut results: Vec<(&Command, i64)> = self
@@ -381,6 +386,7 @@ mod tests {
         assert!(r.search("zzz").is_empty());
     }
 
+    #[cfg(feature = "fuzzy")]
     #[test]
     fn test_fuzzy_search_match() {
         let r = registry();
@@ -389,12 +395,14 @@ mod tests {
         assert!(results.iter().any(|(cmd, _)| cmd.canonical == "list"));
     }
 
+    #[cfg(feature = "fuzzy")]
     #[test]
     fn test_fuzzy_search_no_match() {
         let r = registry();
         assert!(r.fuzzy_search("zzzzz").is_empty());
     }
 
+    #[cfg(feature = "fuzzy")]
     #[test]
     fn test_fuzzy_search_sorted_by_score() {
         let exact = Command::builder("list")

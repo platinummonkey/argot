@@ -15,7 +15,13 @@ mod tests {
         #[argot(flag, short = 'n', description = "dry run mode")]
         dry_run: bool,
 
-        #[argot(flag, short = 'o', takes_value, description = "output format", default = "text")]
+        #[argot(
+            flag,
+            short = 'o',
+            takes_value,
+            description = "output format",
+            default = "text"
+        )]
         output: String,
     }
 

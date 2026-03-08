@@ -3,9 +3,15 @@
 pub(crate) enum Token {
     Word(String),
     /// `--name` or `--name=value`
-    LongFlag { name: String, value: Option<String> },
+    LongFlag {
+        name: String,
+        value: Option<String>,
+    },
     /// `-f` or `-fvalue`
-    ShortFlag { name: char, value: Option<String> },
+    ShortFlag {
+        name: char,
+        value: Option<String>,
+    },
     /// Bare `--` separator
     Separator,
 }
@@ -82,10 +88,7 @@ mod tests {
             TestCase {
                 name: "words only",
                 input: &["git", "status"],
-                expected: vec![
-                    Token::Word("git".into()),
-                    Token::Word("status".into()),
-                ],
+                expected: vec![Token::Word("git".into()), Token::Word("status".into())],
             },
             TestCase {
                 name: "long flag no value",
@@ -106,7 +109,10 @@ mod tests {
             TestCase {
                 name: "short flag alone",
                 input: &["-v"],
-                expected: vec![Token::ShortFlag { name: 'v', value: None }],
+                expected: vec![Token::ShortFlag {
+                    name: 'v',
+                    value: None,
+                }],
             },
             TestCase {
                 name: "short flag with value",

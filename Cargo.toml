@@ -5,6 +5,7 @@ members = [".", "argot-derive"]
 name = "argot"
 version = "0.1.0"
 edition = "2021"
+rust-version = "1.75.0"
 description = "An agent-first command interface framework for Rust"
 license = "MIT"
 repository = "https://github.com/platinummonkey/argot"
@@ -14,16 +15,21 @@ readme = "README.md"
 keywords = ["cli", "agent", "mcp", "commands", "automation"]
 categories = ["command-line-interface", "development-tools"]
 
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
 [features]
 default = []
 mcp = []
 derive = ["dep:argot-derive"]
+fuzzy = ["dep:fuzzy-matcher"]
 
 [dependencies]
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 thiserror = "2"
-fuzzy-matcher = "0.3"
+fuzzy-matcher = { version = "0.3", optional = true }
 argot-derive = { path = "argot-derive", optional = true }
 
 [dev-dependencies]

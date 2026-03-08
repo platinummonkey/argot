@@ -1,8 +1,8 @@
 use std::sync::Arc;
 
 use argot::{
-    Argument, Command, Example, Flag, Parser, Registry,
     render::{render_help, render_markdown},
+    Argument, Command, Example, Flag, Parser, Registry,
 };
 
 fn build_registry() -> Registry {
@@ -146,7 +146,9 @@ fn test_parse_subcommand_two_levels() {
     let r = build_registry();
     let parser = Parser::new(r.commands());
 
-    let parsed = parser.parse(&["remote", "add", "origin", "https://example.com"]).unwrap();
+    let parsed = parser
+        .parse(&["remote", "add", "origin", "https://example.com"])
+        .unwrap();
     assert_eq!(parsed.command.canonical, "add");
     assert_eq!(parsed.args["name"], "origin");
     assert_eq!(parsed.args["url"], "https://example.com");
@@ -204,8 +206,8 @@ fn test_handler_is_callable() {
     let cmd = r.get_command("run").unwrap();
     assert!(cmd.handler.is_some());
     // Invoke the handler with a minimal ParsedCommand
-    use std::collections::HashMap;
     use argot::ParsedCommand;
+    use std::collections::HashMap;
     let parsed = ParsedCommand {
         command: cmd,
         args: HashMap::new(),
@@ -223,7 +225,10 @@ fn test_full_pipeline() {
 
     let parsed = parser.parse(&["list", "needle"]).unwrap();
     assert_eq!(parsed.command.canonical, "list");
-    assert_eq!(parsed.args.get("filter").map(String::as_str), Some("needle"));
+    assert_eq!(
+        parsed.args.get("filter").map(String::as_str),
+        Some("needle")
+    );
 
     let help = render_help(parsed.command);
     assert!(!help.is_empty());

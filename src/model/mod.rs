@@ -60,9 +60,10 @@ use thiserror::Error;
 
 /// Error returned by builder `build()` methods.
 ///
-/// Currently the only variant is [`BuildError::EmptyCanonical`], which is
-/// returned when a [`CommandBuilder`] or [`ArgumentBuilder`] or [`FlagBuilder`]
-/// is built with an empty or whitespace-only name.
+/// Variants are returned from [`CommandBuilder::build`], [`ArgumentBuilder::build`],
+/// and [`FlagBuilder::build`] when validation fails. The list of variants includes
+/// checks for empty names, duplicate aliases, duplicate flags, duplicate arguments,
+/// duplicate subcommands, and variadic argument ordering.
 ///
 /// # Examples
 ///
@@ -75,4 +76,32 @@ pub enum BuildError {
     /// The canonical name (or argument/flag name) was empty or whitespace.
     #[error("canonical name must not be empty")]
     EmptyCanonical,
+
+    /// Two aliases on the same command share the same string.
+    #[error("duplicate alias `{0}`")]
+    DuplicateAlias(String),
+
+    /// An alias is identical to the command's canonical name.
+    #[error("alias `{0}` duplicates the canonical name")]
+    AliasEqualsCanonical(String),
+
+    /// Two flags on the same command share the same long name.
+    #[error("duplicate flag name `{0}`")]
+    DuplicateFlagName(String),
+
+    /// Two flags on the same command share the same short character.
+    #[error("duplicate short flag `-{0}`")]
+    DuplicateShortFlag(char),
+
+    /// Two positional arguments on the same command share the same name.
+    #[error("duplicate argument name `{0}`")]
+    DuplicateArgumentName(String),
+
+    /// Two subcommands at the same level share the same canonical name.
+    #[error("duplicate subcommand `{0}`")]
+    DuplicateSubcommandName(String),
+
+    /// A variadic argument is not the last argument defined.
+    #[error("variadic argument `{0}` must be the last argument")]
+    VariadicNotLast(String),
 }

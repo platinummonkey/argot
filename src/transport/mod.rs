@@ -70,7 +70,11 @@ impl McpServer {
 
     /// Run the MCP server, reading from `reader` and writing to `writer`.
     /// Blocks until EOF on reader.
-    pub fn serve<R: BufRead, W: Write>(&self, mut reader: R, writer: &mut W) -> std::io::Result<()> {
+    pub fn serve<R: BufRead, W: Write>(
+        &self,
+        mut reader: R,
+        writer: &mut W,
+    ) -> std::io::Result<()> {
         let mut line = String::new();
         loop {
             line.clear();
@@ -224,7 +228,11 @@ impl McpServer {
             }
         }
 
-        let parsed = ParsedCommand { command: cmd, args, flags };
+        let parsed = ParsedCommand {
+            command: cmd,
+            args,
+            flags,
+        };
 
         match &cmd.handler {
             Some(handler) => match handler(&parsed) {
@@ -256,7 +264,11 @@ impl McpServer {
 
     fn command_to_tool(cmd: &Command, prefix: &str) -> Value {
         let tool_name = format!("{}{}", prefix, cmd.canonical);
-        let desc = if !cmd.summary.is_empty() { &cmd.summary } else { &cmd.description };
+        let desc = if !cmd.summary.is_empty() {
+            &cmd.summary
+        } else {
+            &cmd.description
+        };
         json!({
             "name": tool_name,
             "description": desc,
@@ -281,7 +293,11 @@ impl McpServer {
 
         // Flags → string or boolean properties
         for flag in &cmd.flags {
-            let prop_type = if flag.takes_value { "string" } else { "boolean" };
+            let prop_type = if flag.takes_value {
+                "string"
+            } else {
+                "boolean"
+            };
             properties.insert(
                 flag.name.clone(),
                 json!({"type": prop_type, "description": flag.description}),
@@ -419,8 +435,16 @@ mod tests {
         assert_eq!(list_resp["id"], 1);
         let tools = list_resp["result"]["tools"].as_array().unwrap();
         let tool_names: Vec<&str> = tools.iter().map(|t| t["name"].as_str().unwrap()).collect();
-        assert!(tool_names.contains(&"deploy"), "expected 'deploy' in tools: {:?}", tool_names);
-        assert!(tool_names.contains(&"service"), "expected 'service' in tools: {:?}", tool_names);
+        assert!(
+            tool_names.contains(&"deploy"),
+            "expected 'deploy' in tools: {:?}",
+            tool_names
+        );
+        assert!(
+            tool_names.contains(&"service"),
+            "expected 'service' in tools: {:?}",
+            tool_names
+        );
         assert!(
             tool_names.contains(&"service-rollback"),
             "expected 'service-rollback' in tools: {:?}",
@@ -440,7 +464,11 @@ mod tests {
 
         let resp: Value = serde_json::from_str(lines[0]).unwrap();
         assert_eq!(resp["id"], 2);
-        assert!(resp["error"].is_null(), "expected no error, got: {}", resp["error"]);
+        assert!(
+            resp["error"].is_null(),
+            "expected no error, got: {}",
+            resp["error"]
+        );
         let content = resp["result"]["content"].as_array().unwrap();
         assert!(!content.is_empty());
         assert_eq!(content[0]["type"], "text");
@@ -462,7 +490,11 @@ mod tests {
         assert!(!resp["error"].is_null(), "expected error for unknown tool");
         assert_eq!(resp["error"]["code"], -32602);
         let msg = resp["error"]["message"].as_str().unwrap();
-        assert!(msg.contains("nonexistent"), "error message should mention tool name: {}", msg);
+        assert!(
+            msg.contains("nonexistent"),
+            "error message should mention tool name: {}",
+            msg
+        );
     }
 
     #[test]
@@ -506,7 +538,11 @@ mod tests {
 
         let resp: Value = serde_json::from_str(lines[0]).unwrap();
         assert_eq!(resp["id"], 4);
-        assert!(resp["error"].is_null(), "expected no JSON-RPC error, got: {}", resp["error"]);
+        assert!(
+            resp["error"].is_null(),
+            "expected no JSON-RPC error, got: {}",
+            resp["error"]
+        );
         let content = resp["result"]["content"].as_array().unwrap();
         assert_eq!(content[0]["text"], "Command has no handler.");
     }

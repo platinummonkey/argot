@@ -15,10 +15,15 @@
 //! `dep` instead of `deploy` while still producing clear errors when a prefix
 //! is shared by multiple commands.
 //!
+//! When a command cannot be found, the resolver also computes up to three
+//! "did you mean?" suggestions based on Levenshtein edit distance (≤ 2) or
+//! substring containment, and attaches them to the [`ResolveError::Unknown`]
+//! variant.
+//!
 //! # Example
 //!
 //! ```
-//! # use argot::{Command, Resolver};
+//! # use argot::{Command, Resolver, ResolveError};
 //! let cmds = vec![
 //!     Command::builder("list").alias("ls").build().unwrap(),
 //!     Command::builder("log").build().unwrap(),
@@ -34,6 +39,13 @@
 //! assert_eq!(resolver.resolve("lo").unwrap().canonical, "log");
 //! // Ambiguous prefix — "l" matches both "list" and "log"
 //! assert!(resolver.resolve("l").is_err());
+//! // Near-miss — "lust" is one edit away from "list"
+//! match resolver.resolve("lust") {
+//!     Err(ResolveError::Unknown { suggestions, .. }) => {
+//!         assert!(suggestions.contains(&"list".to_string()));
+//!     }
+//!     _ => unreachable!(),
+//! }
 //! ```
 
 use thiserror::Error;
@@ -43,10 +55,15 @@ use crate::model::Command;
 /// Errors produced by [`Resolver::resolve`].
 #[derive(Debug, Error, PartialEq)]
 pub enum ResolveError {
-    /// The input did not match any registered command's canonical name, alias,
-    /// spelling, or prefix thereof.
-    #[error("unknown command: {0}")]
-    Unknown(String),
+    /// The input did not match any registered command. `suggestions` contains
+    /// up to three canonically close alternatives determined by edit distance.
+    #[error("unknown command: `{input}`")]
+    Unknown {
+        /// The original (untrimmed) input string.
+        input: String,
+        /// Up to three canonical names that are close to `input`. May be empty.
+        suggestions: Vec<String>,
+    },
     /// The input matched more than one command as a prefix, making it
     /// ambiguous. The `candidates` field lists the canonical names of the
     /// matching commands.
@@ -112,7 +129,9 @@ impl<'a> Resolver<'a> {
     /// # Errors
     ///
     /// - [`ResolveError::Unknown`] — no command matched `input` exactly or as
-    ///   a prefix.
+    ///   a prefix. The `suggestions` field contains up to three canonical names
+    ///   whose edit distance from `input` is ≤ 2, or which contain `input` as
+    ///   a substring. May be empty if no close matches exist.
     /// - [`ResolveError::Ambiguous`] — `input` is a prefix of more than one
     ///   command; the `candidates` field lists their canonical names.
     ///
@@ -125,13 +144,16 @@ impl<'a> Resolver<'a> {
     ///
     /// assert_eq!(resolver.resolve("get").unwrap().canonical, "get");
     /// assert_eq!(resolver.resolve("GET").unwrap().canonical, "get"); // case-insensitive
-    /// assert!(matches!(resolver.resolve("xyz"), Err(ResolveError::Unknown(_))));
+    /// assert!(matches!(resolver.resolve("xyz"), Err(ResolveError::Unknown { .. })));
     /// ```
     pub fn resolve(&self, input: &str) -> Result<&'a Command, ResolveError> {
         let normalized = input.trim().to_lowercase();
 
         if normalized.is_empty() {
-            return Err(ResolveError::Unknown(input.to_string()));
+            return Err(ResolveError::Unknown {
+                input: input.to_string(),
+                suggestions: vec![],
+            });
         }
 
         // 1. Exact match
@@ -153,7 +175,29 @@ impl<'a> Resolver<'a> {
             .collect();
 
         match matches.len() {
-            0 => Err(ResolveError::Unknown(input.to_string())),
+            0 => {
+                // Compute "did you mean?" suggestions — canonical names within
+                // edit distance 2 or containing the normalized input as a substring.
+                let mut suggestions: Vec<(String, usize)> = self
+                    .commands
+                    .iter()
+                    .filter_map(|cmd| {
+                        let dist = edit_distance(&normalized, &cmd.canonical.to_lowercase());
+                        if dist <= 2 || cmd.canonical.to_lowercase().contains(&normalized) {
+                            Some((cmd.canonical.clone(), dist))
+                        } else {
+                            None
+                        }
+                    })
+                    .collect();
+                suggestions.sort_by_key(|(_, d)| *d);
+                let suggestions: Vec<String> =
+                    suggestions.into_iter().take(3).map(|(s, _)| s).collect();
+                Err(ResolveError::Unknown {
+                    input: input.to_string(),
+                    suggestions,
+                })
+            }
             1 => Ok(matches[0]),
             _ => Err(ResolveError::Ambiguous {
                 input: input.to_string(),
@@ -161,6 +205,30 @@ impl<'a> Resolver<'a> {
             }),
         }
     }
+}
+
+/// Compute the Levenshtein edit distance between two strings.
+fn edit_distance(a: &str, b: &str) -> usize {
+    let a: Vec<char> = a.chars().collect();
+    let b: Vec<char> = b.chars().collect();
+    let (la, lb) = (a.len(), b.len());
+    let mut dp = vec![vec![0usize; lb + 1]; la + 1];
+    for (i, row) in dp.iter_mut().enumerate().take(la + 1) {
+        row[0] = i;
+    }
+    for (j, cell) in dp[0].iter_mut().enumerate().take(lb + 1) {
+        *cell = j;
+    }
+    for i in 1..=la {
+        for j in 1..=lb {
+            dp[i][j] = if a[i - 1] == b[j - 1] {
+                dp[i - 1][j - 1]
+            } else {
+                1 + dp[i - 1][j - 1].min(dp[i - 1][j]).min(dp[i][j - 1])
+            };
+        }
+    }
+    dp[la][lb]
 }
 
 #[cfg(test)]
@@ -276,7 +344,7 @@ mod tests {
                         tc.name
                     );
                 }
-                Err(ResolveError::Unknown(_)) => {
+                Err(ResolveError::Unknown { .. }) => {
                     assert!(tc.expect_unknown, "case '{}': unexpected Unknown", tc.name);
                 }
             }
@@ -293,6 +361,39 @@ mod tests {
                 assert!(candidates.contains(&"log".to_string()));
             }
             other => panic!("expected Ambiguous, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_unknown_with_suggestions() {
+        let commands = cmds(); // list / log / get
+        let resolver = Resolver::new(&commands);
+        // "lust" is close to "list" (edit distance 1 after normalization)
+        match resolver.resolve("lust") {
+            Err(ResolveError::Unknown { suggestions, .. }) => {
+                assert!(
+                    suggestions.contains(&"list".to_string()),
+                    "expected 'list' in suggestions, got {:?}",
+                    suggestions
+                );
+            }
+            other => panic!("expected Unknown, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_unknown_no_suggestions_for_gibberish() {
+        let commands = cmds();
+        let resolver = Resolver::new(&commands);
+        match resolver.resolve("xyzzy") {
+            Err(ResolveError::Unknown { suggestions, .. }) => {
+                assert!(
+                    suggestions.is_empty(),
+                    "expected no suggestions for gibberish, got {:?}",
+                    suggestions
+                );
+            }
+            other => panic!("expected Unknown, got {:?}", other),
         }
     }
 }

@@ -69,7 +69,8 @@
 //! | Feature   | Description |
 //! |-----------|-------------|
 //! | `derive`  | Enables the `#[derive(ArgotCommand)]` proc-macro from `argot-derive`. |
-//! | `mcp`     | Reserved for future MCP (Model Context Protocol) integration. |
+//! | `fuzzy`   | Enables [`Registry::fuzzy_search`] via the `fuzzy-matcher` crate.    |
+//! | `mcp`     | Enables the MCP stdio transport server ([`transport`]).               |
 //!
 //! ## Modules
 //!
