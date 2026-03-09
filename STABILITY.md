@@ -85,4 +85,4 @@ Deprecated items will be annotated with `#[deprecated(since = "x.y.z", note = ".
 
 ## MSRV
 
-The minimum supported Rust version is **1.75.0**. MSRV increases are treated as breaking changes for `1.x` and minor-version changes for `0.x`.
+The minimum supported Rust version is **1.94.0**. MSRV increases are treated as breaking changes for `1.x` and minor-version changes for `0.x`.

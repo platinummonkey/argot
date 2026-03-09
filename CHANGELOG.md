@@ -97,6 +97,6 @@ Initial release of Argot — an agent-first command interface framework for Rust
 
 ### CI
 
-- `cargo test` on stable/MSRV (1.75.0), `cargo clippy -D warnings`, `cargo doc`
+- `cargo test` on stable/MSRV (1.94.0), `cargo clippy -D warnings`, `cargo doc`
 - `cargo audit` for security advisories
 - `cargo tarpaulin` coverage with 80% threshold enforcement

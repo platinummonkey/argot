@@ -202,7 +202,7 @@ Providing more than one flag from the group returns `ParseError::MutuallyExclusi
 
 # MSRV
 
-Minimum Supported Rust Version: **1.75.0**
+Minimum Supported Rust Version: **1.94.0**
 
 ---
 
