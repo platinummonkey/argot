@@ -44,7 +44,7 @@ if [[ "$COUNT" -ne 2 ]]; then
 fi
 
 # ── Update Cargo.lock ─────────────────────────────────────────────────────────
-cargo update -p argot -p argot-derive 2>&1 | grep -v "^$" || true
+cargo update -p argot-cmd -p argot-cmd-derive 2>&1 | grep -v "^$" || true
 
 # ── Commit and push ───────────────────────────────────────────────────────────
 git add Cargo.toml Cargo.lock

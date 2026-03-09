@@ -29,7 +29,7 @@ Initial release of Argot — an agent-first command interface framework for Rust
 - `ParsedCommand` coercion: `arg_as::<T>`, `flag_as::<T>`, `arg_as_or`, `flag_as_or`
 - `#[derive(ArgotCommand)]` proc-macro (`--features derive`) — struct → `Command` builder
 - `Hash`, `Ord`, `Eq`, `serde::Serialize`/`Deserialize` on all model types
-- `#![forbid(unsafe_code)]` in both `argot` and `argot-derive`
+- `#![forbid(unsafe_code)]` in both `argot-cmd` and `argot-cmd-derive`
 
 ### Resolver
 

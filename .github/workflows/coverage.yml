@@ -41,7 +41,7 @@ jobs:
             --out Json Lcov \
             --output-dir coverage/ \
             --timeout 120 \
-            --exclude-files "argot-derive/*" \
+            --exclude-files "argot-cmd-derive/*" \
             --exclude-files "examples/*"
 
       - name: Check coverage threshold

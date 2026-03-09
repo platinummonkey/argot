@@ -1,5 +1,5 @@
 [workspace]
-members = [".", "argot-derive"]
+members = [".", "argot-cmd-derive"]
 
 [workspace.package]
 version = "0.1.0"
@@ -9,7 +9,7 @@ license = "MIT"
 repository = "https://github.com/platinummonkey/argot"
 
 [package]
-name = "argot"
+name = "argot-cmd"
 version = "0.1.0"
 edition = "2021"
 rust-version = "1.94.0"
@@ -17,7 +17,7 @@ description = "An agent-first command interface framework for Rust"
 license = "MIT"
 repository = "https://github.com/platinummonkey/argot"
 homepage = "https://github.com/platinummonkey/argot"
-documentation = "https://docs.rs/argot"
+documentation = "https://docs.rs/argot-cmd"
 readme = "README.md"
 keywords = ["cli", "agent", "mcp", "commands", "automation"]
 categories = ["command-line-interface", "development-tools"]
@@ -30,7 +30,7 @@ rustdoc-args = ["--cfg", "docsrs"]
 default = []
 async = []
 mcp = []
-derive = ["dep:argot-derive"]
+derive = ["dep:argot-cmd-derive"]
 fuzzy = ["dep:fuzzy-matcher"]
 
 [dependencies]
@@ -38,7 +38,7 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 thiserror = "2"
 fuzzy-matcher = { version = "0.3", optional = true }
-argot-derive = { path = "argot-derive", optional = true }
+argot-cmd-derive = { path = "argot-cmd-derive", optional = true }
 
 [dev-dependencies]
 tokio = { version = "1", features = ["rt", "macros"] }

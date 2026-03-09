@@ -141,10 +141,10 @@ parameterized helper functions or loops within a single test function. Adding
 cargo install cargo-tarpaulin
 
 # Run with default features
-cargo tarpaulin --timeout 120 --exclude-files "argot-derive/*" "examples/*"
+cargo tarpaulin --timeout 120 --exclude-files "argot-cmd-derive/*" "examples/*"
 
 # Run with all features
-cargo tarpaulin --all-features --timeout 120 --exclude-files "argot-derive/*" "examples/*"
+cargo tarpaulin --all-features --timeout 120 --exclude-files "argot-cmd-derive/*" "examples/*"
 ```
 
 Coverage reports are also generated automatically on every push and pull

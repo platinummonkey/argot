@@ -3,10 +3,10 @@
 version = 4
 
 [[package]]
-name = "argot"
+name = "argot-cmd"
 version = "0.1.0"
 dependencies = [
- "argot-derive",
+ "argot-cmd-derive",
  "fuzzy-matcher",
  "serde",
  "serde_json",
@@ -15,7 +15,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "argot-derive"
+name = "argot-cmd-derive"
 version = "0.1.0"
 dependencies = [
  "proc-macro2",

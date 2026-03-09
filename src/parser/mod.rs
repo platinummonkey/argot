@@ -29,7 +29,7 @@
 //! # Example
 //!
 //! ```
-//! # use argot::{Command, Argument, Flag, Parser};
+//! # use argot_cmd::{Command, Argument, Flag, Parser};
 //! let cmd = Command::builder("list")
 //!     .argument(Argument::builder("filter").build().unwrap())
 //!     .flag(Flag::builder("verbose").short('v').build().unwrap())
@@ -140,7 +140,7 @@ pub enum ParseError {
 /// # Examples
 ///
 /// ```
-/// # use argot::{Command, Parser};
+/// # use argot_cmd::{Command, Parser};
 /// let cmds = vec![Command::builder("status").build().unwrap()];
 /// let parser = Parser::new(&cmds);
 /// let parsed = parser.parse(&["status"]).unwrap();
@@ -192,7 +192,7 @@ impl<'a> Parser<'a> {
     /// # Examples
     ///
     /// ```
-    /// # use argot::{Command, Flag, Parser};
+    /// # use argot_cmd::{Command, Flag, Parser};
     /// let cmd = Command::builder("build")
     ///     .flag(
     ///         Flag::builder("target")

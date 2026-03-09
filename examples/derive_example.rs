@@ -18,7 +18,7 @@ mod inner {
     #![allow(dead_code)] // derive structs are command descriptors, not data holders
     use std::sync::Arc;
 
-    use argot::{ArgotCommand, Cli};
+    use argot_cmd::{ArgotCommand, Cli};
 
     #[derive(ArgotCommand)]
     #[argot(

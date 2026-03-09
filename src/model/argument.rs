@@ -14,7 +14,7 @@ use super::BuildError;
 /// # Examples
 ///
 /// ```
-/// # use argot::Argument;
+/// # use argot_cmd::Argument;
 /// let arg = Argument::builder("target")
 ///     .description("Deployment target environment")
 ///     .required()
@@ -46,7 +46,7 @@ pub struct Argument {
 /// # Examples
 ///
 /// ```
-/// # use argot::Argument;
+/// # use argot_cmd::Argument;
 /// let arg = Argument::builder("format")
 ///     .description("Output format")
 ///     .default_value("text")
@@ -75,7 +75,7 @@ impl Argument {
     /// # Examples
     ///
     /// ```
-    /// # use argot::Argument;
+    /// # use argot_cmd::Argument;
     /// let arg = Argument::builder("file").build().unwrap();
     /// assert_eq!(arg.name, "file");
     /// ```
@@ -137,7 +137,7 @@ impl ArgumentBuilder {
     /// # Examples
     ///
     /// ```
-    /// # use argot::{Argument, BuildError};
+    /// # use argot_cmd::{Argument, BuildError};
     /// assert!(Argument::builder("env").build().is_ok());
     /// assert_eq!(Argument::builder("").build().unwrap_err(), BuildError::EmptyCanonical);
     /// ```

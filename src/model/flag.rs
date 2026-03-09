@@ -11,7 +11,7 @@ use super::BuildError;
 /// # Examples
 ///
 /// ```
-/// # use argot::Flag;
+/// # use argot_cmd::Flag;
 /// let flag = Flag::builder("verbose")
 ///     .short('v')
 ///     .description("Enable verbose output")
@@ -63,7 +63,7 @@ pub struct Flag {
 /// # Examples
 ///
 /// ```
-/// # use argot::Flag;
+/// # use argot_cmd::Flag;
 /// let flag = Flag::builder("output")
 ///     .short('o')
 ///     .description("Output format")
@@ -98,7 +98,7 @@ impl Flag {
     /// # Examples
     ///
     /// ```
-    /// # use argot::Flag;
+    /// # use argot_cmd::Flag;
     /// let flag = Flag::builder("dry-run").build().unwrap();
     /// assert_eq!(flag.name, "dry-run");
     /// ```
@@ -168,7 +168,7 @@ impl FlagBuilder {
     /// # Examples
     ///
     /// ```
-    /// # use argot::Flag;
+    /// # use argot_cmd::Flag;
     /// let flag = Flag::builder("format")
     ///     .takes_value()
     ///     .choices(["json", "yaml", "text"])
@@ -190,7 +190,7 @@ impl FlagBuilder {
     /// # Examples
     ///
     /// ```
-    /// # use argot::Flag;
+    /// # use argot_cmd::Flag;
     /// let flag = Flag::builder("verbose").repeatable().build().unwrap();
     /// assert!(flag.repeatable);
     /// ```
@@ -209,7 +209,7 @@ impl FlagBuilder {
     /// # Examples
     ///
     /// ```
-    /// # use argot::Flag;
+    /// # use argot_cmd::Flag;
     /// let flag = Flag::builder("token").takes_value().env("DEPLOY_TOKEN").build().unwrap();
     /// assert_eq!(flag.env.as_deref(), Some("DEPLOY_TOKEN"));
     /// ```
@@ -228,7 +228,7 @@ impl FlagBuilder {
     /// # Examples
     ///
     /// ```
-    /// # use argot::{Flag, BuildError};
+    /// # use argot_cmd::{Flag, BuildError};
     /// assert!(Flag::builder("verbose").build().is_ok());
     /// assert_eq!(Flag::builder("").build().unwrap_err(), BuildError::EmptyCanonical);
     /// ```

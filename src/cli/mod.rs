@@ -9,7 +9,7 @@
 //!
 //! ```no_run
 //! use std::sync::Arc;
-//! use argot::{Cli, Command};
+//! use argot_cmd::{Cli, Command};
 //!
 //! let cmd = Command::builder("greet")
 //!     .summary("Say hello")
@@ -75,7 +75,7 @@ pub enum CliError {
 ///
 /// ```
 /// # use std::sync::Arc;
-/// # use argot::{Cli, Command};
+/// # use argot_cmd::{Cli, Command};
 /// let cli = Cli::new(vec![
 ///     Command::builder("ping")
 ///         .summary("Check connectivity")
@@ -140,11 +140,11 @@ impl Cli {
     /// # Examples
     ///
     /// ```no_run
-    /// use argot::{Cli, Command, middleware::Middleware};
+    /// use argot_cmd::{Cli, Command, middleware::Middleware};
     ///
     /// struct Audit;
     /// impl Middleware for Audit {
-    ///     fn before_dispatch(&self, parsed: &argot::ParsedCommand<'_>) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    ///     fn before_dispatch(&self, parsed: &argot_cmd::ParsedCommand<'_>) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     ///         eprintln!("audit: {}", parsed.command.canonical);
     ///         Ok(())
     ///     }
@@ -166,12 +166,12 @@ impl Cli {
     /// # Examples
     ///
     /// ```no_run
-    /// # use argot::{Cli, Command, render::Renderer};
+    /// # use argot_cmd::{Cli, Command, render::Renderer};
     /// struct MyRenderer;
     /// impl Renderer for MyRenderer {
-    ///     fn render_help(&self, cmd: &argot::Command) -> String { format!("HELP: {}", cmd.canonical) }
-    ///     fn render_markdown(&self, cmd: &argot::Command) -> String { String::new() }
-    ///     fn render_subcommand_list(&self, cmds: &[argot::Command]) -> String { String::new() }
+    ///     fn render_help(&self, cmd: &argot_cmd::Command) -> String { format!("HELP: {}", cmd.canonical) }
+    ///     fn render_markdown(&self, cmd: &argot_cmd::Command) -> String { String::new() }
+    ///     fn render_subcommand_list(&self, cmds: &[argot_cmd::Command]) -> String { String::new() }
     ///     fn render_ambiguity(&self, input: &str, _: &[String]) -> String { format!("bad: {}", input) }
     /// }
     ///
@@ -198,7 +198,7 @@ impl Cli {
     /// # Examples
     ///
     /// ```no_run
-    /// use argot::{Cli, Command};
+    /// use argot_cmd::{Cli, Command};
     ///
     /// let cli = Cli::new(vec![Command::builder("deploy").build().unwrap()])
     ///     .with_query_support();
@@ -254,7 +254,7 @@ impl Cli {
     ///
     /// ```
     /// # use std::sync::Arc;
-    /// # use argot::{Cli, Command, CliError};
+    /// # use argot_cmd::{Cli, Command, CliError};
     /// let cli = Cli::new(vec![
     ///     Command::builder("hello")
     ///         .handler(Arc::new(|_| Ok(())))
@@ -393,7 +393,7 @@ impl Cli {
     /// to be a one-liner:
     ///
     /// ```no_run
-    /// use argot::{Cli, Command};
+    /// use argot_cmd::{Cli, Command};
     /// use std::sync::Arc;
     ///
     /// fn main() {

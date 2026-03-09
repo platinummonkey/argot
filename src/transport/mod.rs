@@ -23,10 +23,10 @@ use crate::query::Registry;
 /// # Examples
 ///
 /// ```no_run
-/// # use argot::{Command, Registry};
+/// # use argot_cmd::{Command, Registry};
 /// # #[cfg(feature = "mcp")]
 /// # {
-/// use argot::McpServer;
+/// use argot_cmd::McpServer;
 ///
 /// let registry = Registry::new(vec![
 ///     Command::builder("ping").summary("Ping the server").build().unwrap(),

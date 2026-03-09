@@ -11,13 +11,13 @@ git_release_latest = true
 git_tag_enable = true
 git_tag_name = "v{{ version }}"
 
-# argot-derive is a proc-macro crate published alongside argot.
+# argot-cmd-derive is a proc-macro crate published alongside argot-cmd.
 # release-plz cannot diff it against crates.io until it has been published
-# manually the first time (cargo publish -p argot-derive), so disable
+# manually the first time (cargo publish -p argot-cmd-derive), so disable
 # release-plz management for it entirely. It is published by the release
-# workflow via an explicit cargo publish step before argot is published.
+# workflow via an explicit cargo publish step before argot-cmd is published.
 [[package]]
-name = "argot-derive"
+name = "argot-cmd-derive"
 release = false
 
 [changelog]

@@ -3,8 +3,8 @@
 <!-- Badges -->
 ![CI](https://github.com/platinummonkey/argot/actions/workflows/ci.yml/badge.svg)
 [![Coverage](https://codecov.io/gh/platinummonkey/argot/branch/main/graph/badge.svg)](https://codecov.io/gh/platinummonkey/argot)
-[![Crates.io](https://img.shields.io/crates/v/argot.svg)](https://crates.io/crates/argot)
-[![docs.rs](https://docs.rs/argot/badge.svg)](https://docs.rs/argot)
+[![Crates.io](https://img.shields.io/crates/v/argot-cmd.svg)](https://crates.io/crates/argot-cmd)
+[![docs.rs](https://docs.rs/argot-cmd/badge.svg)](https://docs.rs/argot-cmd)
 
 ---
 
@@ -20,18 +20,18 @@ The design philosophy is: the CLI is one interface to the command model, not the
 
 ## Quick Start
 
-Add argot to your `Cargo.toml`:
+Add argot-cmd to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-argot = "0.1"
+argot-cmd = "0.1"
 ```
 
 Define a command, build a `Cli`, and call `run_env_args_and_exit()`:
 
 ```rust
 use std::sync::Arc;
-use argot::{Argument, Cli, Command, Flag};
+use argot_cmd::{Argument, Cli, Command, Flag};
 
 fn main() {
     let deploy = Command::builder("deploy")
@@ -119,7 +119,7 @@ All builder methods consume and return `self` for chaining. Call `.build()` at t
 
 ```rust
 use std::sync::Arc;
-use argot::{Argument, Command, Example, Flag};
+use argot_cmd::{Argument, Command, Example, Flag};
 
 let cmd = Command::builder("deploy")
     .alias("release")                          // shown in help, participates in prefix matching
@@ -181,7 +181,7 @@ let cmd = Command::builder("deploy")
 Positional arguments are bound in declaration order. Use `Argument::builder(name)`:
 
 ```rust
-use argot::Argument;
+use argot_cmd::Argument;
 
 // Required positional argument
 let env = Argument::builder("env")
@@ -210,7 +210,7 @@ let files = Argument::builder("files")
 Named flags can be boolean or value-taking. Use `Flag::builder(name)`:
 
 ```rust
-use argot::Flag;
+use argot_cmd::Flag;
 
 // Boolean flag
 let verbose = Flag::builder("verbose")
@@ -273,7 +273,7 @@ Lookup order for a flag: CLI argv → environment variable (if `.env()` is set) 
 Declare groups of flags where at most one may be provided per invocation:
 
 ```rust
-use argot::{Command, Flag};
+use argot_cmd::{Command, Flag};
 
 let cmd = Command::builder("export")
     .flag(Flag::builder("json").build().unwrap())
@@ -293,7 +293,7 @@ Providing more than one flag from the group returns `ParseError::MutuallyExclusi
 `Cli` wires together `Registry`, `Parser`, and the render layer. It handles built-in behaviors so application code only needs to build commands and register handlers.
 
 ```rust
-use argot::{Cli, Command};
+use argot_cmd::{Cli, Command};
 use std::sync::Arc;
 
 fn main() {
@@ -376,7 +376,7 @@ The `--json` flag is accepted for compatibility but has no effect; all query out
 `Registry` owns the command tree and provides all lookup operations. Pass `registry.commands()` to `Parser::new` to wire it into the parse pipeline.
 
 ```rust
-use argot::{Command, Registry};
+use argot_cmd::{Command, Registry};
 
 let registry = Registry::new(vec![
     Command::builder("deploy").summary("Deploy the app").build().unwrap(),
@@ -426,7 +426,7 @@ All render functions return `String`. None of them print directly; callers write
 ### Plain-text Help
 
 ```rust
-use argot::render_help;
+use argot_cmd::render_help;
 
 let help = render_help(&cmd);
 // Sections: NAME, SUMMARY, DESCRIPTION, USAGE, ARGUMENTS, FLAGS,
@@ -437,7 +437,7 @@ let help = render_help(&cmd);
 ### Compact Command Listing
 
 ```rust
-use argot::render_subcommand_list;
+use argot_cmd::render_subcommand_list;
 
 let listing = render_subcommand_list(registry.commands());
 // Two-column output: "  canonical  summary"
@@ -446,7 +446,7 @@ let listing = render_subcommand_list(registry.commands());
 ### Markdown Documentation
 
 ```rust
-use argot::render_markdown;
+use argot_cmd::render_markdown;
 
 let md = render_markdown(&cmd);
 // GitHub-flavored Markdown with ## headings, tables for arguments/flags,
@@ -456,7 +456,7 @@ let md = render_markdown(&cmd);
 ### Full Registry Docs
 
 ```rust
-use argot::render_docs;
+use argot_cmd::render_docs;
 
 let docs = render_docs(&registry);
 // "# Commands" heading, table of contents with depth-based indentation,
@@ -466,7 +466,7 @@ let docs = render_docs(&registry);
 ### Disambiguation
 
 ```rust
-use argot::render_ambiguity;
+use argot_cmd::render_ambiguity;
 
 let msg = render_ambiguity("dep", &["deploy".to_string(), "describe".to_string()]);
 ```
@@ -476,7 +476,7 @@ let msg = render_ambiguity("dep", &["deploy".to_string(), "describe".to_string()
 Generate a JSON Schema (draft-07) suitable for agent tool definitions (OpenAI function calling, Anthropic tool use, MCP):
 
 ```rust
-use argot::render::render_json_schema;
+use argot_cmd::render::render_json_schema;
 
 let schema = render_json_schema(&cmd).unwrap();
 // Arguments become string properties; boolean flags become boolean properties;
@@ -488,7 +488,7 @@ let schema = render_json_schema(&cmd).unwrap();
 Generate tab-completion scripts for bash, zsh, or fish:
 
 ```rust
-use argot::render::{render_completion, Shell};
+use argot_cmd::render::{render_completion, Shell};
 
 let bash_script  = render_completion(Shell::Bash, "mytool", &registry);
 let zsh_script   = render_completion(Shell::Zsh,  "mytool", &registry);
@@ -502,22 +502,22 @@ Source the script in your shell profile to enable tab-completion.
 Implement the `Renderer` trait and inject it with `Cli::with_renderer`:
 
 ```rust
-use argot::{Cli, Command, render::Renderer};
+use argot_cmd::{Cli, Command, render::Renderer};
 
 struct UppercaseRenderer;
 
 impl Renderer for UppercaseRenderer {
     fn render_help(&self, command: &Command) -> String {
-        argot::render_help(command).to_uppercase()
+        argot_cmd::render_help(command).to_uppercase()
     }
     fn render_markdown(&self, command: &Command) -> String {
-        argot::render_markdown(command)
+        argot_cmd::render_markdown(command)
     }
     fn render_subcommand_list(&self, commands: &[Command]) -> String {
-        argot::render_subcommand_list(commands)
+        argot_cmd::render_subcommand_list(commands)
     }
     fn render_ambiguity(&self, input: &str, candidates: &[String]) -> String {
-        argot::render_ambiguity(input, candidates)
+        argot_cmd::render_ambiguity(input, candidates)
     }
 }
 
@@ -534,7 +534,7 @@ Implement `Middleware` to hook into the parse-and-dispatch lifecycle. Register i
 All methods have default no-op implementations; override only what you need.
 
 ```rust
-use argot::{Cli, Command, middleware::Middleware, ParsedCommand, parser::ParseError};
+use argot_cmd::{Cli, Command, middleware::Middleware, ParsedCommand, parser::ParseError};
 
 struct AuditLogger;
 
@@ -575,7 +575,7 @@ Enable the `async` feature to register async handlers and use `run_async`:
 
 ```toml
 [dependencies]
-argot = { version = "0.1", features = ["async"] }
+argot-cmd = { version = "0.1", features = ["async"] }
 tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
 ```
 
@@ -583,7 +583,7 @@ tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
 #[cfg(feature = "async")]
 mod example {
     use std::sync::Arc;
-    use argot::{Cli, Command};
+    use argot_cmd::{Cli, Command};
 
     #[tokio::main]
     async fn main() {
@@ -621,13 +621,13 @@ Enable the `mcp` feature to expose commands as MCP tools over a stdio JSON-RPC 2
 
 ```toml
 [dependencies]
-argot = { version = "0.1", features = ["mcp"] }
+argot-cmd = { version = "0.1", features = ["mcp"] }
 ```
 
 ```rust
 #[cfg(feature = "mcp")]
 mod example {
-    use argot::{Command, McpServer, Registry};
+    use argot_cmd::{Command, McpServer, Registry};
 
     fn main() {
         let registry = Registry::new(vec![
@@ -672,13 +672,13 @@ Enable the `derive` feature to auto-generate `Command` definitions from struct a
 
 ```toml
 [dependencies]
-argot = { version = "0.1", features = ["derive"] }
+argot-cmd = { version = "0.1", features = ["derive"] }
 ```
 
 ```rust
 #[cfg(feature = "derive")]
 mod example {
-    use argot::ArgotCommand;
+    use argot_cmd::ArgotCommand;
 
     #[derive(ArgotCommand)]
     #[argot(
@@ -741,13 +741,13 @@ Enable the `fuzzy` feature to search commands with the skim fuzzy-matching algor
 
 ```toml
 [dependencies]
-argot = { version = "0.1", features = ["fuzzy"] }
+argot-cmd = { version = "0.1", features = ["fuzzy"] }
 ```
 
 ```rust
 #[cfg(feature = "fuzzy")]
 mod example {
-    use argot::{Command, Registry};
+    use argot_cmd::{Command, Registry};
 
     fn main() {
         let registry = Registry::new(vec![
@@ -773,7 +773,7 @@ Fuzzy search covers the canonical name, summary, and description fields. Command
 | Feature | Description | Default |
 |---------|-------------|---------|
 | `async` | `AsyncHandlerFn`, `Cli::run_async()`, and async-family entry points | no |
-| `derive` | `#[derive(ArgotCommand)]` proc-macro from `argot-derive` | no |
+| `derive` | `#[derive(ArgotCommand)]` proc-macro from `argot-cmd-derive` | no |
 | `fuzzy` | `Registry::fuzzy_search()` via `fuzzy-matcher` (skim algorithm) | no |
 | `mcp` | `McpServer` stdio transport (Model Context Protocol) | no |
 
@@ -794,7 +794,7 @@ Common variants: `EmptyCanonical`, `AliasEqualsCanonical`, `DuplicateAlias`, `Du
 Returned by `Resolver::resolve()`.
 
 ```rust
-use argot::ResolveError;
+use argot_cmd::ResolveError;
 
 match resolver.resolve("dep") {
     Ok(cmd) => { /* unique match */ }

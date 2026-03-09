@@ -1,7 +1,7 @@
 #[cfg(feature = "derive")]
 mod tests {
     #![allow(dead_code)] // derive structs are command descriptors, not data holders
-    use argot::ArgotCommand;
+    use argot_cmd::ArgotCommand;
 
     #[derive(ArgotCommand)]
     #[argot(
@@ -83,7 +83,7 @@ mod tests {
 
     #[test]
     fn test_derive_command_parses_via_parser() {
-        use argot::{Parser, Registry};
+        use argot_cmd::{Parser, Registry};
 
         // Build registry from derived command
         let cmd = Deploy::command();
@@ -102,7 +102,7 @@ mod tests {
 
     #[test]
     fn test_derive_command_flag_parsing() {
-        use argot::{Parser, Registry};
+        use argot_cmd::{Parser, Registry};
 
         let cmd = Deploy::command();
         let registry = Registry::new(vec![cmd]);
@@ -118,7 +118,7 @@ mod tests {
 
     #[test]
     fn test_derive_missing_required_argument() {
-        use argot::{ParseError, Parser, Registry};
+        use argot_cmd::{ParseError, Parser, Registry};
 
         let cmd = Deploy::command();
         let registry = Registry::new(vec![cmd]);
@@ -278,7 +278,7 @@ mod tests {
 
     #[test]
     fn test_derive_e2e_registry_and_parser() {
-        use argot::{Parser, Registry};
+        use argot_cmd::{Parser, Registry};
         let registry = Registry::new(vec![RunJob::command()]);
         let parser = Parser::new(registry.commands());
 

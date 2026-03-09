@@ -17,7 +17,7 @@ use super::{Argument, BuildError, Example, Flag};
 ///
 /// ```
 /// # use std::sync::Arc;
-/// # use argot::HandlerFn;
+/// # use argot_cmd::HandlerFn;
 /// let handler: HandlerFn = Arc::new(|parsed| {
 ///     println!("running command: {}", parsed.command.canonical);
 ///     Ok(())
@@ -41,7 +41,7 @@ pub type HandlerFn =
 /// ```
 /// # #[cfg(feature = "async")] {
 /// use std::sync::Arc;
-/// use argot::AsyncHandlerFn;
+/// use argot_cmd::AsyncHandlerFn;
 ///
 /// let handler: AsyncHandlerFn = Arc::new(|parsed| Box::pin(async move {
 ///     println!("async command: {}", parsed.command.canonical);
@@ -73,7 +73,7 @@ pub type AsyncHandlerFn = std::sync::Arc<
 /// # Examples
 ///
 /// ```
-/// # use argot::{Command, Argument, Parser};
+/// # use argot_cmd::{Command, Argument, Parser};
 /// let cmd = Command::builder("get")
 ///     .argument(
 ///         Argument::builder("id")
@@ -111,7 +111,7 @@ impl<'a> ParsedCommand<'a> {
     /// # Examples
     ///
     /// ```
-    /// # use argot::{Argument, Command, Parser};
+    /// # use argot_cmd::{Argument, Command, Parser};
     /// let cmd = Command::builder("get")
     ///     .argument(Argument::builder("id").required().build().unwrap())
     ///     .build().unwrap();
@@ -129,7 +129,7 @@ impl<'a> ParsedCommand<'a> {
     /// # Examples
     ///
     /// ```
-    /// # use argot::{Command, Flag, Parser};
+    /// # use argot_cmd::{Command, Flag, Parser};
     /// let cmd = Command::builder("run")
     ///     .flag(Flag::builder("output").takes_value().default_value("text").build().unwrap())
     ///     .build().unwrap();
@@ -146,7 +146,7 @@ impl<'a> ParsedCommand<'a> {
     /// # Examples
     ///
     /// ```
-    /// # use argot::{Command, Flag, Parser};
+    /// # use argot_cmd::{Command, Flag, Parser};
     /// let cmd = Command::builder("build")
     ///     .flag(Flag::builder("release").build().unwrap())
     ///     .build().unwrap();
@@ -167,7 +167,7 @@ impl<'a> ParsedCommand<'a> {
     /// # Examples
     ///
     /// ```
-    /// # use argot::{Command, Flag, Parser};
+    /// # use argot_cmd::{Command, Flag, Parser};
     /// // With a repeatable flag (see Flag::repeatable), -v -v -v → flag_count("verbose") == 3
     /// // With a normal flag, --verbose → flag_count("verbose") == 1 (stored as "true")
     /// let cmd = Command::builder("run")
@@ -198,7 +198,7 @@ impl<'a> ParsedCommand<'a> {
     /// # Examples
     ///
     /// ```
-    /// # use argot::{Command, Flag, Parser};
+    /// # use argot_cmd::{Command, Flag, Parser};
     /// let cmd = Command::builder("run")
     ///     .flag(Flag::builder("output").takes_value().default_value("text").build().unwrap())
     ///     .build().unwrap();
@@ -224,7 +224,7 @@ impl<'a> ParsedCommand<'a> {
     /// # Examples
     ///
     /// ```
-    /// # use argot::{Command, Flag, Parser};
+    /// # use argot_cmd::{Command, Flag, Parser};
     /// let cmd = Command::builder("run")
     ///     .flag(Flag::builder("verbose").build().unwrap())
     ///     .flag(Flag::builder("output").takes_value().default_value("text").build().unwrap())
@@ -249,7 +249,7 @@ impl<'a> ParsedCommand<'a> {
     /// # Examples
     ///
     /// ```
-    /// # use argot::{Argument, Command, Parser};
+    /// # use argot_cmd::{Argument, Command, Parser};
     /// let cmd = Command::builder("resize")
     ///     .argument(Argument::builder("width").required().build().unwrap())
     ///     .build().unwrap();
@@ -275,7 +275,7 @@ impl<'a> ParsedCommand<'a> {
     /// # Examples
     ///
     /// ```
-    /// # use argot::{Command, Flag, Parser};
+    /// # use argot_cmd::{Command, Flag, Parser};
     /// let cmd = Command::builder("serve")
     ///     .flag(Flag::builder("port").takes_value().default_value("8080").build().unwrap())
     ///     .build().unwrap();
@@ -294,7 +294,7 @@ impl<'a> ParsedCommand<'a> {
     /// # Examples
     ///
     /// ```
-    /// # use argot::{Argument, Command, Parser};
+    /// # use argot_cmd::{Argument, Command, Parser};
     /// let cmd = Command::builder("run")
     ///     .argument(Argument::builder("count").build().unwrap())
     ///     .build().unwrap();
@@ -312,7 +312,7 @@ impl<'a> ParsedCommand<'a> {
     /// # Examples
     ///
     /// ```
-    /// # use argot::{Command, Flag, Parser};
+    /// # use argot_cmd::{Command, Flag, Parser};
     /// let cmd = Command::builder("serve")
     ///     .flag(Flag::builder("workers").takes_value().build().unwrap())
     ///     .build().unwrap();
@@ -346,7 +346,7 @@ impl<'a> ParsedCommand<'a> {
 /// # Examples
 ///
 /// ```
-/// # use argot::{Command, Argument, Flag, Example};
+/// # use argot_cmd::{Command, Argument, Flag, Example};
 /// let cmd = Command::builder("deploy")
 ///     .alias("d")
 ///     .summary("Deploy the app")
@@ -536,7 +536,7 @@ impl Command {
     /// # Examples
     ///
     /// ```
-    /// # use argot::Command;
+    /// # use argot_cmd::Command;
     /// let cmd = Command::builder("list").build().unwrap();
     /// assert_eq!(cmd.canonical, "list");
     /// ```
@@ -592,7 +592,7 @@ impl Command {
 /// # Examples
 ///
 /// ```
-/// # use argot::{Command, Flag};
+/// # use argot_cmd::{Command, Flag};
 /// let cmd = Command::builder("run")
 ///     .alias("r")
 ///     .summary("Run the pipeline")
@@ -669,7 +669,7 @@ impl CommandBuilder {
     /// # Examples
     ///
     /// ```
-    /// # use argot::Command;
+    /// # use argot_cmd::Command;
     /// let cmd = Command::builder("deploy")
     ///     .alias("release")           // shown in help: "deploy (release)"
     ///     .alias("ship")              // shown in help
@@ -763,7 +763,7 @@ impl CommandBuilder {
     /// # Examples
     ///
     /// ```
-    /// # use argot::Command;
+    /// # use argot_cmd::Command;
     /// let cmd = Command::builder("deploy")
     ///     .semantic_alias("release to production")
     ///     .semantic_alias("push to environment")
@@ -795,7 +795,7 @@ impl CommandBuilder {
     /// ```
     /// # #[cfg(feature = "async")] {
     /// use std::sync::Arc;
-    /// use argot::Command;
+    /// use argot_cmd::Command;
     ///
     /// let cmd = Command::builder("deploy")
     ///     .async_handler(Arc::new(|parsed| Box::pin(async move {
@@ -817,7 +817,7 @@ impl CommandBuilder {
     /// # Examples
     ///
     /// ```
-    /// # use argot::Command;
+    /// # use argot_cmd::Command;
     /// # use serde_json::json;
     /// let cmd = Command::builder("deploy")
     ///     .meta("category", json!("infrastructure"))
@@ -847,7 +847,7 @@ impl CommandBuilder {
     /// # Examples
     ///
     /// ```
-    /// # use argot::{Command, Flag};
+    /// # use argot_cmd::{Command, Flag};
     /// let cmd = Command::builder("export")
     ///     .flag(Flag::builder("json").build().unwrap())
     ///     .flag(Flag::builder("yaml").build().unwrap())
@@ -885,7 +885,7 @@ impl CommandBuilder {
     /// # Examples
     ///
     /// ```
-    /// # use argot::{Command, BuildError};
+    /// # use argot_cmd::{Command, BuildError};
     /// assert!(Command::builder("ok").build().is_ok());
     /// assert_eq!(Command::builder("").build().unwrap_err(), BuildError::EmptyCanonical);
     /// ```

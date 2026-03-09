@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 /// # Examples
 ///
 /// ```
-/// # use argot::Example;
+/// # use argot_cmd::Example;
 /// let ex = Example::new("list all items", "myapp list")
 ///     .with_output("item1\nitem2");
 ///
@@ -41,7 +41,7 @@ impl Example {
     /// # Examples
     ///
     /// ```
-    /// # use argot::Example;
+    /// # use argot_cmd::Example;
     /// let ex = Example::new("deploy to staging", "myapp deploy staging");
     /// assert_eq!(ex.command, "myapp deploy staging");
     /// assert!(ex.output.is_none());
@@ -62,7 +62,7 @@ impl Example {
     /// # Examples
     ///
     /// ```
-    /// # use argot::Example;
+    /// # use argot_cmd::Example;
     /// let ex = Example::new("check version", "myapp --version")
     ///     .with_output("myapp 1.0.0");
     ///

@@ -49,21 +49,21 @@ pub enum Shell {
 /// # Examples
 ///
 /// ```
-/// # use argot::{Command, render::Renderer};
+/// # use argot_cmd::{Command, render::Renderer};
 /// struct UppercaseRenderer;
 ///
 /// impl Renderer for UppercaseRenderer {
 ///     fn render_help(&self, command: &Command) -> String {
-///         argot::render_help(command).to_uppercase()
+///         argot_cmd::render_help(command).to_uppercase()
 ///     }
 ///     fn render_markdown(&self, command: &Command) -> String {
-///         argot::render_markdown(command)
+///         argot_cmd::render_markdown(command)
 ///     }
 ///     fn render_subcommand_list(&self, commands: &[Command]) -> String {
-///         argot::render_subcommand_list(commands)
+///         argot_cmd::render_subcommand_list(commands)
 ///     }
 ///     fn render_ambiguity(&self, input: &str, candidates: &[String]) -> String {
-///         argot::render_ambiguity(input, candidates)
+///         argot_cmd::render_ambiguity(input, candidates)
 ///     }
 /// }
 /// ```
@@ -122,7 +122,7 @@ impl Renderer for DefaultRenderer {
 /// # Examples
 ///
 /// ```
-/// # use argot::{Command, render_help};
+/// # use argot_cmd::{Command, render_help};
 /// let cmd = Command::builder("greet")
 ///     .summary("Say hello")
 ///     .build()
@@ -226,7 +226,7 @@ pub fn render_help(command: &Command) -> String {
 /// # Examples
 ///
 /// ```
-/// # use argot::{Command, render_subcommand_list};
+/// # use argot_cmd::{Command, render_subcommand_list};
 /// let cmds = vec![
 ///     Command::builder("list").summary("List items").build().unwrap(),
 ///     Command::builder("get").summary("Get an item").build().unwrap(),
@@ -262,7 +262,7 @@ pub fn render_subcommand_list(commands: &[Command]) -> String {
 /// # Examples
 ///
 /// ```
-/// # use argot::{Command, render_markdown};
+/// # use argot_cmd::{Command, render_markdown};
 /// let cmd = Command::builder("deploy")
 ///     .summary("Deploy the app")
 ///     .build()
@@ -368,7 +368,7 @@ pub fn render_markdown(command: &Command) -> String {
 /// # Examples
 ///
 /// ```
-/// # use argot::render_ambiguity;
+/// # use argot_cmd::render_ambiguity;
 /// let msg = render_ambiguity("l", &["list".to_string(), "log".to_string()]);
 /// assert!(msg.contains("Ambiguous command"));
 /// assert!(msg.contains("list"));
@@ -397,8 +397,8 @@ pub fn render_ambiguity(input: &str, candidates: &[String]) -> String {
 /// # Examples
 ///
 /// ```
-/// # use argot::{Command, Resolver};
-/// # use argot::render::render_resolve_error;
+/// # use argot_cmd::{Command, Resolver};
+/// # use argot_cmd::render::render_resolve_error;
 /// let cmds = vec![
 ///     Command::builder("list").build().unwrap(),
 ///     Command::builder("log").build().unwrap(),
@@ -440,8 +440,8 @@ pub fn render_resolve_error(error: &crate::resolver::ResolveError) -> String {
 /// # Examples
 ///
 /// ```
-/// # use argot::{Command, Flag, Registry};
-/// # use argot::render::{Shell, render_completion};
+/// # use argot_cmd::{Command, Flag, Registry};
+/// # use argot_cmd::render::{Shell, render_completion};
 /// let registry = Registry::new(vec![
 ///     Command::builder("deploy")
 ///         .flag(Flag::builder("env").takes_value().choices(["prod", "staging"]).build().unwrap())
@@ -645,8 +645,8 @@ fn render_completion_fish(program: &str, registry: &crate::query::Registry) -> S
 /// # Examples
 ///
 /// ```
-/// # use argot::{Argument, Command, Flag};
-/// # use argot::render::render_json_schema;
+/// # use argot_cmd::{Argument, Command, Flag};
+/// # use argot_cmd::render::render_json_schema;
 /// let cmd = Command::builder("deploy")
 ///     .summary("Deploy a service")
 ///     .argument(Argument::builder("env").required().description("Target environment").build().unwrap())
@@ -766,7 +766,7 @@ pub fn render_json_schema(command: &Command) -> Result<String, serde_json::Error
 /// # Examples
 ///
 /// ```
-/// # use argot::{Command, Registry, render_docs};
+/// # use argot_cmd::{Command, Registry, render_docs};
 /// let registry = Registry::new(vec![
 ///     Command::builder("deploy")
 ///         .summary("Deploy the application")

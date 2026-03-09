@@ -14,8 +14,8 @@ use crate::parser::ParseError;
 /// # Examples
 ///
 /// ```
-/// use argot::middleware::Middleware;
-/// use argot::ParsedCommand;
+/// use argot_cmd::middleware::Middleware;
+/// use argot_cmd::ParsedCommand;
 ///
 /// struct Logger;
 ///
@@ -34,8 +34,8 @@ pub trait Middleware: Send + Sync {
     /// # Examples
     ///
     /// ```
-    /// use argot::middleware::Middleware;
-    /// use argot::ParsedCommand;
+    /// use argot_cmd::middleware::Middleware;
+    /// use argot_cmd::ParsedCommand;
     ///
     /// struct RateLimiter { max: usize }
     ///
@@ -63,8 +63,8 @@ pub trait Middleware: Send + Sync {
     /// # Examples
     ///
     /// ```
-    /// use argot::middleware::Middleware;
-    /// use argot::ParsedCommand;
+    /// use argot_cmd::middleware::Middleware;
+    /// use argot_cmd::ParsedCommand;
     ///
     /// struct AuditLog;
     ///
@@ -93,8 +93,8 @@ pub trait Middleware: Send + Sync {
     /// # Examples
     ///
     /// ```
-    /// use argot::middleware::Middleware;
-    /// use argot::parser::ParseError;
+    /// use argot_cmd::middleware::Middleware;
+    /// use argot_cmd::parser::ParseError;
     ///
     /// struct ErrorLogger;
     ///

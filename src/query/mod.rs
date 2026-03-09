@@ -20,7 +20,7 @@
 //! # Example
 //!
 //! ```
-//! # use argot::{Command, Registry};
+//! # use argot_cmd::{Command, Registry};
 //! let registry = Registry::new(vec![
 //!     Command::builder("list").summary("List all items").build().unwrap(),
 //!     Command::builder("get").summary("Get a single item").build().unwrap(),
@@ -55,7 +55,7 @@ impl<'a> CommandEntry<'a> {
     /// # Examples
     ///
     /// ```
-    /// # use argot::{Command, Registry};
+    /// # use argot_cmd::{Command, Registry};
     /// let registry = Registry::new(vec![
     ///     Command::builder("remote")
     ///         .subcommand(Command::builder("add").build().unwrap())
@@ -75,7 +75,7 @@ impl<'a> CommandEntry<'a> {
     /// # Examples
     ///
     /// ```
-    /// # use argot::{Command, Registry};
+    /// # use argot_cmd::{Command, Registry};
     /// let registry = Registry::new(vec![
     ///     Command::builder("remote")
     ///         .subcommand(Command::builder("add").build().unwrap())
@@ -110,7 +110,7 @@ pub enum QueryError {
 /// # Examples
 ///
 /// ```
-/// # use argot::{Command, Registry};
+/// # use argot_cmd::{Command, Registry};
 /// let registry = Registry::new(vec![
 ///     Command::builder("deploy").summary("Deploy the app").build().unwrap(),
 /// ]);
@@ -133,7 +133,7 @@ impl Registry {
     /// # Examples
     ///
     /// ```
-    /// # use argot::{Command, Registry};
+    /// # use argot_cmd::{Command, Registry};
     /// let registry = Registry::new(vec![
     ///     Command::builder("run").build().unwrap(),
     /// ]);
@@ -156,7 +156,7 @@ impl Registry {
     /// # Examples
     ///
     /// ```
-    /// # use argot::{Command, Registry, Parser};
+    /// # use argot_cmd::{Command, Registry, Parser};
     /// let registry = Registry::new(vec![Command::builder("ping").build().unwrap()]);
     /// let parser = Parser::new(registry.commands());
     /// let parsed = parser.parse(&["ping"]).unwrap();
@@ -171,7 +171,7 @@ impl Registry {
     /// # Examples
     ///
     /// ```
-    /// # use argot::{Command, Registry};
+    /// # use argot_cmd::{Command, Registry};
     /// let registry = Registry::new(vec![
     ///     Command::builder("a").build().unwrap(),
     ///     Command::builder("b").build().unwrap(),
@@ -195,7 +195,7 @@ impl Registry {
     /// # Examples
     ///
     /// ```
-    /// # use argot::{Command, Registry};
+    /// # use argot_cmd::{Command, Registry};
     /// let registry = Registry::new(vec![
     ///     Command::builder("deploy").alias("d").build().unwrap(),
     /// ]);
@@ -222,7 +222,7 @@ impl Registry {
     /// # Examples
     ///
     /// ```
-    /// # use argot::{Command, Registry};
+    /// # use argot_cmd::{Command, Registry};
     /// let registry = Registry::new(vec![
     ///     Command::builder("remote")
     ///         .subcommand(Command::builder("add").build().unwrap())
@@ -262,7 +262,7 @@ impl Registry {
     /// # Examples
     ///
     /// ```
-    /// # use argot::{Command, Example, Registry};
+    /// # use argot_cmd::{Command, Example, Registry};
     /// let registry = Registry::new(vec![
     ///     Command::builder("run")
     ///         .example(Example::new("basic run", "myapp run"))
@@ -289,7 +289,7 @@ impl Registry {
     /// # Examples
     ///
     /// ```
-    /// # use argot::{Command, Registry};
+    /// # use argot_cmd::{Command, Registry};
     /// let registry = Registry::new(vec![
     ///     Command::builder("list").summary("List all records").build().unwrap(),
     ///     Command::builder("get").summary("Get a single record").build().unwrap(),
@@ -325,7 +325,7 @@ impl Registry {
     ///
     /// ```
     /// # #[cfg(feature = "fuzzy")] {
-    /// # use argot::{Command, Registry};
+    /// # use argot_cmd::{Command, Registry};
     /// let registry = Registry::new(vec![
     ///     Command::builder("deploy").summary("Deploy a service").build().unwrap(),
     ///     Command::builder("delete").summary("Delete a resource").build().unwrap(),
@@ -365,7 +365,7 @@ impl Registry {
     /// # Examples
     ///
     /// ```
-    /// # use argot::{Command, Registry};
+    /// # use argot_cmd::{Command, Registry};
     /// let registry = Registry::new(vec![
     ///     Command::builder("deploy")
     ///         .summary("Deploy a service to an environment")
@@ -438,7 +438,7 @@ impl Registry {
     /// # Examples
     ///
     /// ```
-    /// # use argot::{Command, Registry};
+    /// # use argot_cmd::{Command, Registry};
     /// let registry = Registry::new(vec![
     ///     Command::builder("deploy").summary("Deploy").build().unwrap(),
     /// ]);
@@ -463,7 +463,7 @@ impl Registry {
     /// # Examples
     ///
     /// ```
-    /// # use argot::{Command, Registry};
+    /// # use argot_cmd::{Command, Registry};
     /// let registry = Registry::new(vec![
     ///     Command::builder("remote")
     ///         .subcommand(Command::builder("add").build().unwrap())

@@ -8,7 +8,7 @@
 
 use std::sync::Arc;
 
-use argot::{Argument, Cli, Command, Example, Flag};
+use argot_cmd::{Argument, Cli, Command, Example, Flag};
 
 fn build_commands() -> Vec<Command> {
     // --- deploy ---

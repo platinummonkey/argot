@@ -23,7 +23,7 @@
 //! # Example
 //!
 //! ```
-//! # use argot::{Command, Resolver, ResolveError};
+//! # use argot_cmd::{Command, Resolver, ResolveError};
 //! let cmds = vec![
 //!     Command::builder("list").alias("ls").build().unwrap(),
 //!     Command::builder("log").build().unwrap(),
@@ -86,7 +86,7 @@ pub enum ResolveError {
 /// # Examples
 ///
 /// ```
-/// # use argot::{Command, Resolver};
+/// # use argot_cmd::{Command, Resolver};
 /// let cmds = vec![
 ///     Command::builder("deploy").alias("d").build().unwrap(),
 ///     Command::builder("delete").build().unwrap(),
@@ -138,7 +138,7 @@ impl<'a> Resolver<'a> {
     /// # Examples
     ///
     /// ```
-    /// # use argot::{Command, Resolver, ResolveError};
+    /// # use argot_cmd::{Command, Resolver, ResolveError};
     /// let cmds = vec![Command::builder("get").build().unwrap()];
     /// let resolver = Resolver::new(&cmds);
     ///

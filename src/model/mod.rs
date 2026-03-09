@@ -9,7 +9,7 @@
 //! All model types are constructed through consuming builders:
 //!
 //! ```
-//! # use argot::model::{Command, Argument, Flag, Example};
+//! # use argot_cmd::model::{Command, Argument, Flag, Example};
 //! let cmd = Command::builder("deploy")
 //!     .summary("Deploy the application")
 //!     .argument(
@@ -70,7 +70,7 @@ use thiserror::Error;
 /// # Examples
 ///
 /// ```
-/// # use argot::model::{Command, BuildError};
+/// # use argot_cmd::model::{Command, BuildError};
 /// assert_eq!(Command::builder("").build().unwrap_err(), BuildError::EmptyCanonical);
 /// ```
 #[derive(Debug, Error, PartialEq)]

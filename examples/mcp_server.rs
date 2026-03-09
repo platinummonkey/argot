@@ -33,7 +33,7 @@
 fn main() {
     use std::sync::Arc;
 
-    use argot::{Argument, Command, Example, Flag, McpServer, Registry};
+    use argot_cmd::{Argument, Command, Example, Flag, McpServer, Registry};
 
     fn build_registry() -> Registry {
         // --- deploy ---

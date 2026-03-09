@@ -32,7 +32,7 @@
 //!
 //! ```no_run
 //! use std::sync::Arc;
-//! use argot::{Command, Flag, Registry, Parser, render_help};
+//! use argot_cmd::{Command, Flag, Registry, Parser, render_help};
 //!
 //! // 1. Build commands.
 //! let cmd = Command::builder("deploy")
@@ -68,7 +68,7 @@
 //!
 //! | Feature   | Description |
 //! |-----------|-------------|
-//! | `derive`  | Enables the `#[derive(ArgotCommand)]` proc-macro from `argot-derive`. |
+//! | `derive`  | Enables the `#[derive(ArgotCommand)]` proc-macro from `argot-cmd-derive`. |
 //! | `fuzzy`   | Enables [`Registry::fuzzy_search`] via the `fuzzy-matcher` crate.    |
 //! | `mcp`     | Enables the MCP stdio transport server ([`transport`]).               |
 //!
@@ -120,9 +120,9 @@ pub use resolver::{ResolveError, Resolver};
 ///
 /// ```
 /// # #[cfg(feature = "derive")] {
-/// use argot::ArgotCommand;
+/// use argot_cmd::ArgotCommand;
 ///
-/// #[derive(argot::ArgotCommand)]
+/// #[derive(argot_cmd::ArgotCommand)]
 /// #[argot(summary = "Greet the world")]
 /// struct Greet;
 ///
@@ -137,7 +137,7 @@ pub trait ArgotCommand {
 }
 
 #[cfg(feature = "derive")]
-pub use argot_derive::ArgotCommand;
+pub use argot_cmd_derive::ArgotCommand;
 
 /// MCP (Model Context Protocol) stdio transport server.
 ///

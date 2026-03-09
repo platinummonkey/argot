@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use argot::{
+use argot_cmd::{
     render::{render_help, render_markdown},
     Argument, Command, Example, Flag, Parser, Registry,
 };
@@ -172,7 +172,7 @@ fn test_parse_missing_required_arg() {
     // "remote add" requires both name and url
     let err = parser.parse(&["remote", "add"]).unwrap_err();
     assert!(
-        matches!(err, argot::ParseError::MissingArgument(_)),
+        matches!(err, argot_cmd::ParseError::MissingArgument(_)),
         "expected MissingArgument, got {:?}",
         err
     );
@@ -206,7 +206,7 @@ fn test_handler_is_callable() {
     let cmd = r.get_command("run").unwrap();
     assert!(cmd.handler.is_some());
     // Invoke the handler with a minimal ParsedCommand
-    use argot::ParsedCommand;
+    use argot_cmd::ParsedCommand;
     use std::collections::HashMap;
     let parsed = ParsedCommand {
         command: cmd,
@@ -243,7 +243,7 @@ fn test_serde_round_trip_with_subcommands() {
     let json = r.to_json().unwrap();
 
     // Re-parse the JSON into a Vec<Command>
-    let commands: Vec<argot::Command> = serde_json::from_str(&json).unwrap();
+    let commands: Vec<argot_cmd::Command> = serde_json::from_str(&json).unwrap();
 
     // Verify structure survived round-trip
     let remote = commands
@@ -272,8 +272,8 @@ fn test_serde_round_trip_with_subcommands() {
     );
 
     // Re-build a registry from the deserialized commands and verify parsing still works
-    let new_registry = argot::Registry::new(commands);
-    let parser = argot::Parser::new(new_registry.commands());
+    let new_registry = argot_cmd::Registry::new(commands);
+    let parser = argot_cmd::Parser::new(new_registry.commands());
     let parsed = parser.parse(&["list"]).unwrap();
     assert_eq!(parsed.command.canonical, "list");
 }
@@ -282,24 +282,24 @@ fn test_serde_round_trip_with_subcommands() {
 fn test_command_named_help_parses_correctly() {
     // A user-defined "help" command should be parseable; it only conflicts
     // with Cli's --help flag, not with direct Parser use.
-    let help_cmd = argot::Command::builder("help")
+    let help_cmd = argot_cmd::Command::builder("help")
         .summary("Show help information")
         .build()
         .unwrap();
-    let registry = argot::Registry::new(vec![help_cmd]);
-    let parser = argot::Parser::new(registry.commands());
+    let registry = argot_cmd::Registry::new(vec![help_cmd]);
+    let parser = argot_cmd::Parser::new(registry.commands());
     let parsed = parser.parse(&["help"]).unwrap();
     assert_eq!(parsed.command.canonical, "help");
 }
 
 #[test]
 fn test_command_named_version_parses_correctly() {
-    let version_cmd = argot::Command::builder("version")
+    let version_cmd = argot_cmd::Command::builder("version")
         .summary("Print version information")
         .build()
         .unwrap();
-    let registry = argot::Registry::new(vec![version_cmd]);
-    let parser = argot::Parser::new(registry.commands());
+    let registry = argot_cmd::Registry::new(vec![version_cmd]);
+    let parser = argot_cmd::Parser::new(registry.commands());
     let parsed = parser.parse(&["version"]).unwrap();
     assert_eq!(parsed.command.canonical, "version");
 }
@@ -313,7 +313,7 @@ fn test_parse_error_no_command() {
     let cmds = vec![Command::builder("run").build().unwrap()];
     assert!(matches!(
         Parser::new(&cmds).parse(&[]),
-        Err(argot::ParseError::NoCommand)
+        Err(argot_cmd::ParseError::NoCommand)
     ));
 }
 
@@ -322,8 +322,8 @@ fn test_parse_error_unknown_command() {
     let cmds = vec![Command::builder("run").build().unwrap()];
     assert!(matches!(
         Parser::new(&cmds).parse(&["nope"]),
-        Err(argot::ParseError::Resolve(
-            argot::ResolveError::Unknown { .. }
+        Err(argot_cmd::ParseError::Resolve(
+            argot_cmd::ResolveError::Unknown { .. }
         ))
     ));
 }
@@ -336,8 +336,8 @@ fn test_parse_error_ambiguous_command() {
     ];
     assert!(matches!(
         Parser::new(&cmds).parse(&["f"]),
-        Err(argot::ParseError::Resolve(
-            argot::ResolveError::Ambiguous { .. }
+        Err(argot_cmd::ParseError::Resolve(
+            argot_cmd::ResolveError::Ambiguous { .. }
         ))
     ));
 }
@@ -349,7 +349,7 @@ fn test_parse_error_missing_argument() {
         .build()
         .unwrap()];
     match Parser::new(&cmds).parse(&["get"]) {
-        Err(argot::ParseError::MissingArgument(n)) => assert_eq!(n, "id"),
+        Err(argot_cmd::ParseError::MissingArgument(n)) => assert_eq!(n, "id"),
         other => panic!("expected MissingArgument(id), got {:?}", other),
     }
 }
@@ -358,7 +358,7 @@ fn test_parse_error_missing_argument() {
 fn test_parse_error_unexpected_argument() {
     let cmds = vec![Command::builder("run").build().unwrap()];
     match Parser::new(&cmds).parse(&["run", "extra"]) {
-        Err(argot::ParseError::UnexpectedArgument(v)) => assert_eq!(v, "extra"),
+        Err(argot_cmd::ParseError::UnexpectedArgument(v)) => assert_eq!(v, "extra"),
         other => panic!("expected UnexpectedArgument, got {:?}", other),
     }
 }
@@ -376,7 +376,7 @@ fn test_parse_error_missing_required_flag() {
         .build()
         .unwrap()];
     match Parser::new(&cmds).parse(&["deploy"]) {
-        Err(argot::ParseError::MissingFlag(n)) => assert_eq!(n, "env"),
+        Err(argot_cmd::ParseError::MissingFlag(n)) => assert_eq!(n, "env"),
         other => panic!("expected MissingFlag(env), got {:?}", other),
     }
 }
@@ -388,7 +388,7 @@ fn test_parse_error_flag_missing_value() {
         .build()
         .unwrap()];
     match Parser::new(&cmds).parse(&["build", "--target"]) {
-        Err(argot::ParseError::FlagMissingValue { name }) => assert_eq!(name, "target"),
+        Err(argot_cmd::ParseError::FlagMissingValue { name }) => assert_eq!(name, "target"),
         other => panic!("expected FlagMissingValue, got {:?}", other),
     }
 }
@@ -397,7 +397,7 @@ fn test_parse_error_flag_missing_value() {
 fn test_parse_error_unknown_flag() {
     let cmds = vec![Command::builder("run").build().unwrap()];
     match Parser::new(&cmds).parse(&["run", "--ghost"]) {
-        Err(argot::ParseError::UnknownFlag(n)) => assert!(n.contains("ghost")),
+        Err(argot_cmd::ParseError::UnknownFlag(n)) => assert!(n.contains("ghost")),
         other => panic!("expected UnknownFlag, got {:?}", other),
     }
 }
@@ -409,7 +409,7 @@ fn test_parse_error_unknown_subcommand() {
         .build()
         .unwrap()];
     match Parser::new(&cmds).parse(&["remote", "bogus"]) {
-        Err(argot::ParseError::UnknownSubcommand { parent, got }) => {
+        Err(argot_cmd::ParseError::UnknownSubcommand { parent, got }) => {
             assert_eq!(parent, "remote");
             assert_eq!(got, "bogus");
         }
@@ -430,7 +430,7 @@ fn test_parse_error_invalid_choice() {
         .build()
         .unwrap()];
     match Parser::new(&cmds).parse(&["build", "--format=xml"]) {
-        Err(argot::ParseError::InvalidChoice {
+        Err(argot_cmd::ParseError::InvalidChoice {
             flag,
             value,
             choices,
@@ -526,7 +526,7 @@ fn test_flag_present_and_absent() {
 
 #[cfg(feature = "async")]
 mod async_tests {
-    use argot::{Cli, CliError, Command};
+    use argot_cmd::{Cli, CliError, Command};
     use std::sync::{
         atomic::{AtomicBool, Ordering},
         Arc,

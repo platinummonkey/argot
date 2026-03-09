@@ -20,7 +20,7 @@ The following are considered **public API** and will not change within a minor v
 - `ArgotCommand` trait
 - `McpServer` method signatures (feature: `mcp`)
 
-### Proc-Macro (`argot-derive`) Attribute Stability
+### Proc-Macro (`argot-cmd-derive`) Attribute Stability
 
 The `#[derive(ArgotCommand)]` macro and all documented `#[argot(...)]` attributes are **stable from v0.2 onwards**.
 

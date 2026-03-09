@@ -66,7 +66,7 @@ src/
   render/           — plain-text and Markdown renderers
   cli/              — high-level Cli entry point
   transport/        — MCP stdio transport (feature: mcp)
-argot-derive/       — #[derive(ArgotCommand)] proc-macro
+argot-cmd-derive/       — #[derive(ArgotCommand)] proc-macro
 examples/           — runnable example programs
 tests/              — integration tests
 ```
