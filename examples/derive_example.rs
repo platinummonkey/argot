@@ -17,7 +17,7 @@
 mod inner {
     use std::sync::Arc;
 
-    use argot::{render_help, render_subcommand_list, ArgotCommand, Parser, Registry};
+    use argot::{ArgotCommand, Cli};
 
     #[derive(ArgotCommand)]
     #[argot(
@@ -128,35 +128,11 @@ mod inner {
             Ok(())
         }));
 
-        let registry = Registry::new(vec![deploy_cmd, status_cmd]);
-
-        let args: Vec<String> = std::env::args().skip(1).collect();
-        let argv: Vec<&str> = args.iter().map(String::as_str).collect();
-
-        // Handle --help / -h or empty args
-        if argv.is_empty() || argv.iter().any(|a| *a == "--help" || *a == "-h") {
-            println!("derive-example: CLI commands defined with #[derive(ArgotCommand)]\n");
-            println!("{}", render_subcommand_list(registry.commands()));
-            return;
-        }
-
-        let parser = Parser::new(registry.commands());
-        match parser.parse(&argv) {
-            Ok(parsed) => {
-                if let Some(handler) = &parsed.command.handler {
-                    if let Err(e) = handler(&parsed) {
-                        eprintln!("error: {}", e);
-                        std::process::exit(1);
-                    }
-                } else {
-                    println!("{}", render_help(parsed.command));
-                }
-            }
-            Err(e) => {
-                eprintln!("error: {}", e);
-                std::process::exit(1);
-            }
-        }
+        Cli::new(vec![deploy_cmd, status_cmd])
+            .app_name("derive-example")
+            .version(env!("CARGO_PKG_VERSION"))
+            .with_query_support()
+            .run_env_args_and_exit();
     }
 }
 
