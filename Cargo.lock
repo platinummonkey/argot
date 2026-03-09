@@ -4,7 +4,7 @@ version = 4
 
 [[package]]
 name = "argot-cmd"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "argot-cmd-derive",
  "fuzzy-matcher",
@@ -16,7 +16,7 @@ dependencies = [
 
 [[package]]
 name = "argot-cmd-derive"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "proc-macro2",
  "quote",
