@@ -1366,7 +1366,10 @@ mod tests {
         assert!(result.is_ok(), "expected Ok, got {:?}", result);
         let parsed = result.unwrap();
         assert_eq!(parsed.command.canonical, "git");
-        assert_eq!(parsed.flags.get("verbose").map(String::as_str), Some("true"));
+        assert_eq!(
+            parsed.flags.get("verbose").map(String::as_str),
+            Some("true")
+        );
     }
 
     #[test]

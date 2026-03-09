@@ -528,8 +528,8 @@ fn test_flag_present_and_absent() {
 mod async_tests {
     use argot::{Cli, CliError, Command};
     use std::sync::{
-        Arc,
         atomic::{AtomicBool, Ordering},
+        Arc,
     };
 
     fn make_async_cli_no_handler() -> Cli {
@@ -544,7 +544,11 @@ mod async_tests {
     async fn test_async_run_empty_args() {
         let cli = make_async_cli_no_handler();
         let result = cli.run_async(std::iter::empty::<&str>()).await;
-        assert!(result.is_ok(), "empty args should return Ok, got {:?}", result);
+        assert!(
+            result.is_ok(),
+            "empty args should return Ok, got {:?}",
+            result
+        );
     }
 
     #[tokio::test]
@@ -558,7 +562,11 @@ mod async_tests {
     async fn test_async_run_version_flag() {
         let cli = make_async_cli_no_handler();
         let result = cli.run_async(["--version"]).await;
-        assert!(result.is_ok(), "--version should return Ok, got {:?}", result);
+        assert!(
+            result.is_ok(),
+            "--version should return Ok, got {:?}",
+            result
+        );
     }
 
     #[tokio::test]
@@ -580,8 +588,15 @@ mod async_tests {
 
         let cli = Cli::new(vec![cmd]).app_name("testapp").version("1.0.0");
         let result = cli.run_async(["deploy"]).await;
-        assert!(result.is_ok(), "async handler should succeed, got {:?}", result);
-        assert!(called.load(Ordering::SeqCst), "async handler should have been called");
+        assert!(
+            result.is_ok(),
+            "async handler should succeed, got {:?}",
+            result
+        );
+        assert!(
+            called.load(Ordering::SeqCst),
+            "async handler should have been called"
+        );
     }
 
     #[tokio::test]
@@ -600,8 +615,15 @@ mod async_tests {
 
         let cli = Cli::new(vec![cmd]).app_name("testapp").version("1.0.0");
         let result = cli.run_async(["build"]).await;
-        assert!(result.is_ok(), "sync handler fallback should succeed, got {:?}", result);
-        assert!(called.load(Ordering::SeqCst), "sync handler should have been called via run_async");
+        assert!(
+            result.is_ok(),
+            "sync handler fallback should succeed, got {:?}",
+            result
+        );
+        assert!(
+            called.load(Ordering::SeqCst),
+            "sync handler should have been called via run_async"
+        );
     }
 
     #[tokio::test]

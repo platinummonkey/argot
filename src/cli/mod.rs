@@ -659,14 +659,12 @@ impl Cli {
                         println!("{}", json);
                         Ok(())
                     }
-                    Err(crate::resolver::ResolveError::Unknown { .. }) => {
-                        Err(CliError::Handler(
-                            Box::<dyn std::error::Error + Send + Sync>::from(format!(
-                                "unknown command: `{}`",
-                                name
-                            )),
-                        ))
-                    }
+                    Err(crate::resolver::ResolveError::Unknown { .. }) => Err(CliError::Handler(
+                        Box::<dyn std::error::Error + Send + Sync>::from(format!(
+                            "unknown command: `{}`",
+                            name
+                        )),
+                    )),
                 }
             }
         }
@@ -989,8 +987,14 @@ mod tests {
         use crate::model::Command;
         // Two commands sharing the prefix "dep" make resolution ambiguous.
         let cli = super::Cli::new(vec![
-            Command::builder("deploy").summary("Deploy").build().unwrap(),
-            Command::builder("describe").summary("Describe").build().unwrap(),
+            Command::builder("deploy")
+                .summary("Deploy")
+                .build()
+                .unwrap(),
+            Command::builder("describe")
+                .summary("Describe")
+                .build()
+                .unwrap(),
         ])
         .with_query_support();
 
@@ -1009,7 +1013,10 @@ mod tests {
         use crate::model::{Command, Example};
         let cli = super::Cli::new(vec![Command::builder("deploy")
             .summary("Deploy svc")
-            .example(Example::new("Deploy to production", "deploy api --env prod"))
+            .example(Example::new(
+                "Deploy to production",
+                "deploy api --env prod",
+            ))
             .build()
             .unwrap()])
         .with_query_support();
@@ -1025,8 +1032,8 @@ mod tests {
     #[test]
     fn test_query_examples_unknown_errors() {
         use crate::model::Command;
-        let cli = super::Cli::new(vec![Command::builder("deploy").build().unwrap()])
-            .with_query_support();
+        let cli =
+            super::Cli::new(vec![Command::builder("deploy").build().unwrap()]).with_query_support();
 
         let result = cli.run(["query", "examples", "nonexistent"]);
         assert!(
@@ -1043,7 +1050,11 @@ mod tests {
     async fn test_run_async_empty_args() {
         let cli = make_cli_no_handler();
         let result = cli.run_async(std::iter::empty::<&str>()).await;
-        assert!(result.is_ok(), "empty args should return Ok, got {:?}", result);
+        assert!(
+            result.is_ok(),
+            "empty args should return Ok, got {:?}",
+            result
+        );
     }
 
     #[cfg(feature = "async")]
@@ -1059,7 +1070,11 @@ mod tests {
     async fn test_run_async_version_flag() {
         let cli = make_cli_no_handler();
         let result = cli.run_async(["--version"]).await;
-        assert!(result.is_ok(), "--version should return Ok, got {:?}", result);
+        assert!(
+            result.is_ok(),
+            "--version should return Ok, got {:?}",
+            result
+        );
     }
 
     #[cfg(feature = "async")]
@@ -1081,7 +1096,10 @@ mod tests {
             .version("1.2.3");
         let result = cli.run_async(["greet"]).await;
         assert!(result.is_ok(), "handler should succeed, got {:?}", result);
-        assert!(called.load(Ordering::SeqCst), "handler should have been called");
+        assert!(
+            called.load(Ordering::SeqCst),
+            "handler should have been called"
+        );
     }
 
     #[cfg(feature = "async")]
@@ -1199,7 +1217,10 @@ mod tests {
     #[test]
     fn test_help_for_subcommand() {
         // --help with a known subcommand resolves to that command's help
-        let sub = Command::builder("rollback").summary("Roll back").build().unwrap();
+        let sub = Command::builder("rollback")
+            .summary("Roll back")
+            .build()
+            .unwrap();
         let parent = Command::builder("deploy")
             .summary("Deploy")
             .subcommand(sub)
@@ -1232,8 +1253,8 @@ mod tests {
     fn test_query_with_no_arg_outputs_json() {
         // "query" alone (no subcommand) is same as "query commands"
         use crate::model::Command;
-        let cli = super::Cli::new(vec![Command::builder("deploy").build().unwrap()])
-            .with_query_support();
+        let cli =
+            super::Cli::new(vec![Command::builder("deploy").build().unwrap()]).with_query_support();
         assert!(cli.run(["query"]).is_ok());
     }
 
@@ -1277,8 +1298,8 @@ mod tests {
     #[test]
     fn test_query_examples_no_name_errors() {
         use crate::model::Command;
-        let cli = super::Cli::new(vec![Command::builder("deploy").build().unwrap()])
-            .with_query_support();
+        let cli =
+            super::Cli::new(vec![Command::builder("deploy").build().unwrap()]).with_query_support();
         // "query examples" with no command name should error
         let result = cli.run(["query", "examples"]);
         assert!(result.is_err(), "query examples with no name should error");

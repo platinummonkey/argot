@@ -1231,7 +1231,12 @@ mod tests {
                         .build()
                         .unwrap(),
                 )
-                .flag(Flag::builder("dry-run").description("simulate").build().unwrap())
+                .flag(
+                    Flag::builder("dry-run")
+                        .description("simulate")
+                        .build()
+                        .unwrap(),
+                )
                 .argument(Argument::builder("service").required().build().unwrap())
                 .build()
                 .unwrap(),
@@ -1267,7 +1272,12 @@ mod tests {
                     .build()
                     .unwrap(),
             )
-            .flag(Flag::builder("dry-run").description("simulate").build().unwrap())
+            .flag(
+                Flag::builder("dry-run")
+                    .description("simulate")
+                    .build()
+                    .unwrap(),
+            )
             .build()
             .unwrap()]);
         let script = render_completion(Shell::Fish, "mytool", &reg);
@@ -1374,10 +1384,7 @@ mod tests {
     fn test_render_help_output_in_example() {
         // Example with output should show "# Output:" line
         let cmd = Command::builder("run")
-            .example(
-                Example::new("Run example", "myapp run")
-                    .with_output("OK"),
-            )
+            .example(Example::new("Run example", "myapp run").with_output("OK"))
             .build()
             .unwrap();
         let help = render_help(&cmd);
@@ -1401,7 +1408,12 @@ mod tests {
     #[test]
     fn test_render_markdown_with_subcommands() {
         let cmd = Command::builder("remote")
-            .subcommand(Command::builder("add").summary("Add remote").build().unwrap())
+            .subcommand(
+                Command::builder("add")
+                    .summary("Add remote")
+                    .build()
+                    .unwrap(),
+            )
             .build()
             .unwrap();
         let md = render_markdown(&cmd);

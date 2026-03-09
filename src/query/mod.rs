@@ -412,11 +412,12 @@ impl Registry {
                     cmd.summary.to_lowercase(),
                     cmd.description.to_lowercase(),
                 );
-                let score = words
-                    .iter()
-                    .filter(|&&w| combined.contains(w))
-                    .count() as u32;
-                if score > 0 { Some((cmd, score)) } else { None }
+                let score = words.iter().filter(|&&w| combined.contains(w)).count() as u32;
+                if score > 0 {
+                    Some((cmd, score))
+                } else {
+                    None
+                }
             })
             .collect();
 
@@ -647,12 +648,10 @@ mod tests {
 
     #[test]
     fn test_match_intent_no_match() {
-        let r = Registry::new(vec![
-            Command::builder("deploy")
-                .summary("Deploy a service")
-                .build()
-                .unwrap(),
-        ]);
+        let r = Registry::new(vec![Command::builder("deploy")
+            .summary("Deploy a service")
+            .build()
+            .unwrap()]);
         let results = r.match_intent("zzz xyzzy foobar");
         assert!(results.is_empty());
     }

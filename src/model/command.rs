@@ -1358,9 +1358,7 @@ mod tests {
             .unwrap();
         let cmds = vec![cmd];
         let parser = Parser::new(&cmds);
-        let parsed = parser
-            .parse(&["serve", "localhost", "--verbose"])
-            .unwrap();
+        let parsed = parser.parse(&["serve", "localhost", "--verbose"]).unwrap();
 
         assert_eq!(parsed.arg("host"), Some("localhost"));
         assert_eq!(parsed.arg("missing"), None);
@@ -1425,9 +1423,7 @@ mod tests {
             .unwrap();
         let cmds = vec![cmd];
         let parser = Parser::new(&cmds);
-        let parsed = parser
-            .parse(&["cmd", "--tag=alpha", "--tag=beta"])
-            .unwrap();
+        let parsed = parser.parse(&["cmd", "--tag=alpha", "--tag=beta"]).unwrap();
         let values = parsed.flag_values("tag");
         assert_eq!(values, vec!["alpha", "beta"]);
     }
