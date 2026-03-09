@@ -9,11 +9,9 @@
 
 use std::sync::Arc;
 
-use argot::{
-    render_help, render_subcommand_list, Argument, Command, Example, Flag, Parser, Registry,
-};
+use argot::{Argument, Cli, Command, Example, Flag};
 
-fn build_registry() -> Registry {
+fn build_commands() -> Vec<Command> {
     // --- clone ---
     let clone_cmd = Command::builder("clone")
         .summary("Clone a repository into a new directory")
@@ -223,37 +221,13 @@ fn build_registry() -> Registry {
         .build()
         .unwrap();
 
-    Registry::new(vec![clone_cmd, commit_cmd, status_cmd, remote_cmd])
+    vec![clone_cmd, commit_cmd, status_cmd, remote_cmd]
 }
 
 fn main() {
-    let registry = build_registry();
-    let args: Vec<String> = std::env::args().skip(1).collect();
-    let argv: Vec<&str> = args.iter().map(String::as_str).collect();
-
-    // Handle --help / -h before parsing
-    if argv.is_empty() || argv.iter().any(|a| *a == "--help" || *a == "-h") {
-        println!("git-like: a demo of argot multi-level subcommands\n");
-        println!("{}", render_subcommand_list(registry.commands()));
-        return;
-    }
-
-    let parser = Parser::new(registry.commands());
-    match parser.parse(&argv) {
-        Ok(parsed) => {
-            if let Some(handler) = &parsed.command.handler {
-                if let Err(e) = handler(&parsed) {
-                    eprintln!("error: {}", e);
-                    std::process::exit(1);
-                }
-            } else {
-                // No handler — show help for that command (e.g. bare `remote`)
-                println!("{}", render_help(parsed.command));
-            }
-        }
-        Err(e) => {
-            eprintln!("error: {}", e);
-            std::process::exit(1);
-        }
-    }
+    Cli::new(build_commands())
+        .app_name("git-like")
+        .version(env!("CARGO_PKG_VERSION"))
+        .with_query_support()
+        .run_env_args_and_exit();
 }

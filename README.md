@@ -198,6 +198,7 @@ Providing more than one flag from the group returns `ParseError::MutuallyExclusi
 | `derive` | `#[derive(ArgotCommand)]` proc-macro | no |
 | `fuzzy`  | `Registry::fuzzy_search()` via `fuzzy-matcher` | no |
 | `mcp`    | `McpServer` stdio transport (Model Context Protocol) | no |
+| `async`  | `AsyncHandlerFn`, `Cli::run_async()`, `Cli::run_env_args_async()` | no |
 
 # MSRV
 
