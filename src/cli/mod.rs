@@ -596,13 +596,17 @@ impl Cli {
                 println!("{}", json);
                 Ok(())
             }
-            // `query <name>` → JSON for the named command
-            Some(name) => {
+            // `query examples <name>` → JSON array of examples for the named command
+            Some("examples") => {
+                let name = args.get(1).copied().ok_or_else(|| {
+                    CliError::Handler(Box::<dyn std::error::Error + Send + Sync>::from(
+                        "usage: query examples <command-name>",
+                    ))
+                })?;
                 let cmd = self
                     .registry
                     .get_command(name)
                     .or_else(|| {
-                        // Try resolver for prefix/alias matching.
                         let resolver = crate::resolver::Resolver::new(self.registry.commands());
                         resolver.resolve(name).ok()
                     })
@@ -611,13 +615,59 @@ impl Cli {
                             format!("unknown command: `{}`", name),
                         ))
                     })?;
-                let json = serde_json::to_string_pretty(cmd).map_err(|e| {
+                let json = serde_json::to_string_pretty(&cmd.examples).map_err(|e| {
                     CliError::Handler(Box::<dyn std::error::Error + Send + Sync>::from(
                         e.to_string(),
                     ))
                 })?;
                 println!("{}", json);
                 Ok(())
+            }
+            // `query <name>` → JSON for the named command
+            Some(name) => {
+                // First try exact match, then resolver (which handles prefix/alias).
+                let cmd = self.registry.get_command(name);
+                if let Some(cmd) = cmd {
+                    let json = serde_json::to_string_pretty(cmd).map_err(|e| {
+                        CliError::Handler(Box::<dyn std::error::Error + Send + Sync>::from(
+                            e.to_string(),
+                        ))
+                    })?;
+                    println!("{}", json);
+                    return Ok(());
+                }
+
+                // Try resolver for prefix/alias matching; handle ambiguity with structured JSON.
+                let resolver = crate::resolver::Resolver::new(self.registry.commands());
+                match resolver.resolve(name) {
+                    Ok(cmd) => {
+                        let json = serde_json::to_string_pretty(cmd).map_err(|e| {
+                            CliError::Handler(Box::<dyn std::error::Error + Send + Sync>::from(
+                                e.to_string(),
+                            ))
+                        })?;
+                        println!("{}", json);
+                        Ok(())
+                    }
+                    Err(crate::resolver::ResolveError::Ambiguous { input, candidates }) => {
+                        // Agents should receive data, not errors — emit structured JSON.
+                        let json = serde_json::json!({
+                            "error": "ambiguous",
+                            "input": input,
+                            "candidates": candidates,
+                        });
+                        println!("{}", json);
+                        Ok(())
+                    }
+                    Err(crate::resolver::ResolveError::Unknown { .. }) => {
+                        Err(CliError::Handler(
+                            Box::<dyn std::error::Error + Send + Sync>::from(format!(
+                                "unknown command: `{}`",
+                                name
+                            )),
+                        ))
+                    }
+                }
             }
         }
     }
@@ -932,5 +982,57 @@ mod tests {
         // --json flag must not cause an error
         assert!(cli.run(["query", "deploy", "--json"]).is_ok());
         assert!(cli.run(["query", "commands", "--json"]).is_ok());
+    }
+
+    #[test]
+    fn test_query_ambiguous_returns_structured_json() {
+        use crate::model::Command;
+        // Two commands sharing the prefix "dep" make resolution ambiguous.
+        let cli = super::Cli::new(vec![
+            Command::builder("deploy").summary("Deploy").build().unwrap(),
+            Command::builder("describe").summary("Describe").build().unwrap(),
+        ])
+        .with_query_support();
+
+        // Before the fix this would have returned Err; now it must return Ok(())
+        // and print structured JSON to stdout.
+        let result = cli.run(["query", "dep"]);
+        assert!(
+            result.is_ok(),
+            "ambiguous query should return Ok(()) with JSON on stdout, got {:?}",
+            result
+        );
+    }
+
+    #[test]
+    fn test_query_examples_returns_examples() {
+        use crate::model::{Command, Example};
+        let cli = super::Cli::new(vec![Command::builder("deploy")
+            .summary("Deploy svc")
+            .example(Example::new("Deploy to production", "deploy api --env prod"))
+            .build()
+            .unwrap()])
+        .with_query_support();
+
+        let result = cli.run(["query", "examples", "deploy"]);
+        assert!(
+            result.is_ok(),
+            "query examples for known command should return Ok(()), got {:?}",
+            result
+        );
+    }
+
+    #[test]
+    fn test_query_examples_unknown_errors() {
+        use crate::model::Command;
+        let cli = super::Cli::new(vec![Command::builder("deploy").build().unwrap()])
+            .with_query_support();
+
+        let result = cli.run(["query", "examples", "nonexistent"]);
+        assert!(
+            result.is_err(),
+            "query examples for unknown command should return Err, got {:?}",
+            result
+        );
     }
 }

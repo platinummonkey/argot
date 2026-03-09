@@ -16,6 +16,10 @@
 //! - **[`render_ambiguity`]** — formats a human-readable message when a
 //!   command token is ambiguous.
 //!
+//! - **[`render_docs`]** — produces a full Markdown reference document for all
+//!   commands in a [`crate::query::Registry`], with a table of contents and
+//!   per-command sections separated by `---`.
+//!
 //! None of the functions print to stdout/stderr directly; all return a
 //! `String` that the caller can write wherever appropriate.
 
@@ -72,6 +76,13 @@ pub trait Renderer: Send + Sync {
     fn render_subcommand_list(&self, commands: &[crate::model::Command]) -> String;
     /// Render a disambiguation message for an ambiguous command token.
     fn render_ambiguity(&self, input: &str, candidates: &[String]) -> String;
+    /// Render a full Markdown reference document for all commands in a registry.
+    ///
+    /// Produces a `# Commands` heading, a table of contents with depth-based
+    /// indentation, and per-command Markdown sections separated by `---`.
+    fn render_docs(&self, registry: &crate::query::Registry) -> String {
+        render_docs(registry)
+    }
 }
 
 /// The default renderer. Delegates to the module-level free functions.
@@ -92,6 +103,9 @@ impl Renderer for DefaultRenderer {
     }
     fn render_ambiguity(&self, input: &str, candidates: &[String]) -> String {
         render_ambiguity(input, candidates)
+    }
+    fn render_docs(&self, registry: &crate::query::Registry) -> String {
+        render_docs(registry)
     }
 }
 
@@ -736,6 +750,63 @@ pub fn render_json_schema(command: &Command) -> Result<String, serde_json::Error
     serde_json::to_string_pretty(&schema)
 }
 
+/// Render a full Markdown reference document for all commands in a registry.
+///
+/// The output contains:
+/// - A `# Commands` top-level heading.
+/// - A table of contents: a bulleted list of anchor links to each command in
+///   depth-first order. Subcommands are indented by two spaces per level beyond
+///   the first.
+/// - Each command rendered with [`render_markdown`], separated by `---` lines.
+///
+/// # Arguments
+///
+/// - `registry` — The registry whose commands should be documented.
+///
+/// # Examples
+///
+/// ```
+/// # use argot::{Command, Registry, render_docs};
+/// let registry = Registry::new(vec![
+///     Command::builder("deploy")
+///         .summary("Deploy the application")
+///         .subcommand(Command::builder("rollback").summary("Roll back").build().unwrap())
+///         .build()
+///         .unwrap(),
+///     Command::builder("status").summary("Show status").build().unwrap(),
+/// ]);
+///
+/// let docs = render_docs(&registry);
+/// assert!(docs.contains("# Commands"));
+/// assert!(docs.contains("# deploy"));
+/// assert!(docs.contains("# rollback"));
+/// assert!(docs.contains("# status"));
+/// assert!(docs.contains("---"));
+/// ```
+pub fn render_docs(registry: &crate::query::Registry) -> String {
+    let entries = registry.iter_all_recursive();
+
+    let mut out = String::from("# Commands\n\n");
+
+    // Table of contents
+    for entry in &entries {
+        let depth = entry.path.len();
+        let indent = "  ".repeat(depth.saturating_sub(1));
+        let anchor = entry.path_str().replace('.', "-").to_lowercase();
+        let label = entry.path_str().replace('.', " ");
+        out.push_str(&format!("{}- [{}](#{})\n", indent, label, anchor));
+    }
+
+    // Per-command sections
+    for (i, entry) in entries.iter().enumerate() {
+        out.push_str("\n---\n\n");
+        out.push_str(&render_markdown(entry.command));
+        let _ = i; // suppress unused variable warning
+    }
+
+    out
+}
+
 fn build_usage(command: &Command) -> String {
     let mut parts = vec![command.canonical.clone()];
     if !command.subcommands.is_empty() {
@@ -1051,5 +1122,77 @@ mod tests {
         let help = render_help(&cmd);
         assert!(help.contains("release"), "alias should appear in help");
         assert!(!help.contains("deply"), "spelling must not appear in help");
+    }
+
+    fn docs_registry() -> crate::query::Registry {
+        use crate::query::Registry;
+        Registry::new(vec![
+            Command::builder("deploy")
+                .summary("Deploy the application")
+                .subcommand(
+                    Command::builder("rollback")
+                        .summary("Roll back a deployment")
+                        .build()
+                        .unwrap(),
+                )
+                .build()
+                .unwrap(),
+            Command::builder("status")
+                .summary("Show status")
+                .build()
+                .unwrap(),
+        ])
+    }
+
+    #[test]
+    fn test_render_docs_contains_all_commands() {
+        let reg = docs_registry();
+        let docs = render_docs(&reg);
+        assert!(docs.contains("# Commands"), "missing top-level heading");
+        assert!(docs.contains("deploy"), "missing deploy");
+        assert!(docs.contains("rollback"), "missing rollback");
+        assert!(docs.contains("status"), "missing status");
+        assert!(docs.contains("---"), "missing separator");
+    }
+
+    #[test]
+    fn test_render_docs_table_of_contents_indents_subcommands() {
+        let reg = docs_registry();
+        let docs = render_docs(&reg);
+        // "deploy" at top level — no leading spaces before the bullet
+        assert!(
+            docs.contains("\n- [deploy](#deploy)"),
+            "deploy should be at root indent"
+        );
+        // "deploy rollback" at depth 2 — two leading spaces
+        assert!(
+            docs.contains("\n  - [deploy rollback](#deploy-rollback)"),
+            "deploy rollback should be indented"
+        );
+        // "status" at top level
+        assert!(
+            docs.contains("\n- [status](#status)"),
+            "status should be at root indent"
+        );
+    }
+
+    #[test]
+    fn test_render_docs_empty_registry() {
+        use crate::query::Registry;
+        let reg = Registry::new(vec![]);
+        let docs = render_docs(&reg);
+        assert!(docs.starts_with("# Commands\n\n"));
+        // Should not panic and should not contain any separator (no commands)
+        assert!(!docs.contains("---"));
+    }
+
+    #[test]
+    fn test_default_renderer_render_docs() {
+        let reg = docs_registry();
+        let renderer = DefaultRenderer;
+        let docs = renderer.render_docs(&reg);
+        assert!(docs.contains("# Commands"));
+        assert!(docs.contains("deploy"));
+        assert!(docs.contains("status"));
     }
 }
