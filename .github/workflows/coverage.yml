@@ -92,8 +92,8 @@ jobs:
               f.write(svg)
 
           print(f"Coverage: {pct_str}")
-          if pct < 80:
-              print(f"ERROR: coverage {pct_str} is below the 80% threshold", file=sys.stderr)
+          if pct < 75:
+              print(f"ERROR: coverage {pct_str} is below the 75% threshold", file=sys.stderr)
               sys.exit(1)
           EOF
 

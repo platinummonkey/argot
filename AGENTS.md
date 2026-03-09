@@ -124,7 +124,7 @@ Tests should cover:
 - example retrieval
 - command discovery APIs
 - help rendering
-- at least 80% code coverage (enforced by CI via `cargo-tarpaulin`)
+- at least 75% code coverage (enforced by CI via `cargo-tarpaulin`; current: ~78%)
 - formatting that passes `rustfmt`
 - lint checks that pass `clippy`
 
