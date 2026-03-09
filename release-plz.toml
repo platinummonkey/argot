@@ -11,6 +11,12 @@ git_release_latest = true
 git_tag_enable = true
 git_tag_name = "v{{ version }}"
 
+# argot-derive is a proc-macro crate; cargo-semver-checks does not support
+# proc-macros, so skip the semver check for it.
+[[package]]
+name = "argot-derive"
+semver_check = false
+
 [changelog]
 header = """
 # Changelog
