@@ -32,46 +32,80 @@ jobs:
       - name: Install cargo-tarpaulin
         uses: taiki-e/install-action@cargo-tarpaulin
 
-      - name: Run coverage (default features)
+      - name: Run coverage (all features)
         run: |
           cargo tarpaulin \
-            --out Xml \
+            --all-features \
+            --out Json \
             --output-dir coverage/ \
             --timeout 120 \
             --exclude-files "argot-derive/*" \
             --exclude-files "examples/*"
 
-      - name: Run coverage (all features)
+      - name: Generate coverage badge SVG
         run: |
-          cargo tarpaulin \
-            --all-features \
-            --out Xml \
-            --output-dir coverage-all/ \
-            --timeout 120 \
-            --exclude-files "argot-derive/*" \
-            --exclude-files "examples/*"
+          python3 - <<'EOF'
+          import json, sys
 
-      - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v4
-        with:
-          files: coverage/cobertura.xml
-          fail_ci_if_error: false
-          token: ${{ secrets.CODECOV_TOKEN }}
+          with open("coverage/tarpaulin-report.json") as f:
+              data = json.load(f)
 
-      - name: Check coverage threshold
+          pct = float(data.get("coverage", 0))
+          pct_str = f"{pct:.1f}%"
+
+          if pct >= 80:
+              colour = "#4c1"
+          elif pct >= 60:
+              colour = "#a3c51c"
+          elif pct >= 40:
+              colour = "#f89406"
+          else:
+              colour = "#e05d44"
+
+          label = "coverage"
+          label_w = 61
+          value_w = max(len(pct_str) * 7 + 10, 36)
+          total_w = label_w + value_w
+
+          svg = f"""<svg xmlns="http://www.w3.org/2000/svg" width="{total_w}" height="20">
+            <linearGradient id="s" x2="0" y2="100%">
+              <stop offset="0" stop-color="#bbb" stop-opacity=".1"/>
+              <stop offset="1" stop-opacity=".1"/>
+            </linearGradient>
+            <clipPath id="r">
+              <rect width="{total_w}" height="20" rx="3" fill="#fff"/>
+            </clipPath>
+            <g clip-path="url(#r)">
+              <rect width="{label_w}" height="20" fill="#555"/>
+              <rect x="{label_w}" width="{value_w}" height="20" fill="{colour}"/>
+              <rect width="{total_w}" height="20" fill="url(#s)"/>
+            </g>
+            <g fill="#fff" text-anchor="middle" font-family="DejaVu Sans,Verdana,Geneva,sans-serif" font-size="11">
+              <text x="{label_w // 2}" y="14" fill="#010101" fill-opacity=".3">{label}</text>
+              <text x="{label_w // 2}" y="13">{label}</text>
+              <text x="{label_w + value_w // 2}" y="14" fill="#010101" fill-opacity=".3">{pct_str}</text>
+              <text x="{label_w + value_w // 2}" y="13">{pct_str}</text>
+            </g>
+          </svg>"""
+
+          with open("coverage.svg", "w") as f:
+              f.write(svg)
+
+          print(f"Coverage: {pct_str}")
+          if pct < 80:
+              print(f"ERROR: coverage {pct_str} is below the 80% threshold", file=sys.stderr)
+              sys.exit(1)
+          EOF
+
+      - name: Commit coverage badge
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         run: |
-          # Extract line coverage percentage from the XML report.
-          COVERAGE=$(python3 -c "
-          import xml.etree.ElementTree as ET
-          tree = ET.parse('coverage/cobertura.xml')
-          root = tree.getroot()
-          rate = float(root.attrib.get('line-rate', 0)) * 100
-          print(f'{rate:.1f}')
-          ")
-          echo "Line coverage: ${COVERAGE}%"
-          python3 -c "
-          rate = float('${COVERAGE}')
-          if rate < 80:
-              raise SystemExit(f'Coverage {rate:.1f}% is below the 80% threshold')
-          print(f'Coverage {rate:.1f}% meets the 80% threshold')
-          "
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add coverage.svg
+          if git diff --cached --quiet; then
+            echo "No badge changes to commit"
+          else
+            git commit -m "chore: update coverage badge [skip ci]"
+            git push
+          fi

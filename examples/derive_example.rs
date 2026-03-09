@@ -15,6 +15,7 @@
 
 #[cfg(feature = "derive")]
 mod inner {
+    #![allow(dead_code)] // derive structs are command descriptors, not data holders
     use std::sync::Arc;
 
     use argot::{ArgotCommand, Cli};
@@ -119,10 +120,10 @@ mod inner {
                     );
                 }
                 _ => {
-                    println!("{:<15} {:<10} {}", "ENVIRONMENT", "VERSION", "STATUS");
+                    println!("{:<15} {:<10} STATUS", "ENVIRONMENT", "VERSION");
                     println!("{}", "-".repeat(40));
-                    println!("{:<15} {:<10} {}", "staging", "v1.5.0", "healthy");
-                    println!("{:<15} {:<10} {}", "production", "v1.4.2", "healthy");
+                    println!("{:<15} {:<10} healthy", "staging", "v1.5.0");
+                    println!("{:<15} {:<10} healthy", "production", "v1.4.2");
                 }
             }
             Ok(())

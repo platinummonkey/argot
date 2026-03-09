@@ -741,7 +741,7 @@ impl CommandBuilder {
     /// Register an async handler for this command (feature: `async`).
     ///
     /// The handler receives a [`ParsedCommand`] and returns a boxed future.
-    /// Use [`Cli::run_async`] to dispatch async handlers.
+    /// Use [`crate::Cli::run_async`] to dispatch async handlers.
     ///
     /// # Examples
     ///

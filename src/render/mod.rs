@@ -37,7 +37,7 @@ pub enum Shell {
 /// A pluggable renderer for command help, Markdown docs, and disambiguation messages.
 ///
 /// Implement this trait to fully customize how argot formats its output.
-/// Use [`Cli::with_renderer`] to inject your implementation.
+/// Use [`crate::Cli::with_renderer`] to inject your implementation.
 ///
 /// A [`DefaultRenderer`] is provided that delegates to the module-level free
 /// functions ([`render_help`], [`render_markdown`], etc.).

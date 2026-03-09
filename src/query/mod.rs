@@ -640,7 +640,7 @@ mod fuzzy_tests {
             Command::builder("delete").build().unwrap(),
         ]);
         let results = r.fuzzy_search("deploy");
-        assert!(results.len() >= 1);
+        assert!(!results.is_empty());
         // Scores should be in descending order
         for i in 1..results.len() {
             assert!(

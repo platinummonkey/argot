@@ -217,10 +217,10 @@ fn main() {
                         eprintln!("production,v1.4.2,healthy");
                     }
                     _ => {
-                        eprintln!("{:<15} {:<10} {}", "ENVIRONMENT", "VERSION", "STATUS");
+                        eprintln!("{:<15} {:<10} STATUS", "ENVIRONMENT", "VERSION");
                         eprintln!("{}", "-".repeat(40));
-                        eprintln!("{:<15} {:<10} {}", "staging", "v1.5.0", "healthy");
-                        eprintln!("{:<15} {:<10} {}", "production", "v1.4.2", "healthy");
+                        eprintln!("{:<15} {:<10} healthy", "staging", "v1.5.0");
+                        eprintln!("{:<15} {:<10} healthy", "production", "v1.4.2");
                     }
                 }
                 Ok(())

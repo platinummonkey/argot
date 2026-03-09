@@ -449,7 +449,7 @@ impl Cli {
     ///
     /// Behaves identically to [`Cli::run`] but also invokes
     /// [`AsyncHandlerFn`][crate::model::AsyncHandlerFn] handlers
-    /// registered with [`CommandBuilder::async_handler`].
+    /// registered with [`crate::CommandBuilder::async_handler`].
     ///
     /// Must be called from an async context (e.g., inside `#[tokio::main]`).
     ///

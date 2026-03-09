@@ -192,10 +192,10 @@ fn build_commands() -> Vec<Command> {
                     println!("prod,v1.4.2,healthy,2026-03-07T14:30:00Z");
                 }
                 _ => {
-                    println!("{:<12} {:<10} {:<10} {}", "ENVIRONMENT", "VERSION", "STATUS", "DEPLOYED AT");
+                    println!("{:<12} {:<10} {:<10} DEPLOYED AT", "ENVIRONMENT", "VERSION", "STATUS");
                     println!("{}", "-".repeat(60));
-                    println!("{:<12} {:<10} {:<10} {}", "staging", "v1.5.0", "healthy", "2026-03-08T10:00:00Z");
-                    println!("{:<12} {:<10} {:<10} {}", "prod", "v1.4.2", "healthy", "2026-03-07T14:30:00Z");
+                    println!("{:<12} {:<10} {:<10} 2026-03-08T10:00:00Z", "staging", "v1.5.0", "healthy");
+                    println!("{:<12} {:<10} {:<10} 2026-03-07T14:30:00Z", "prod", "v1.4.2", "healthy");
                 }
             }
             Ok(())

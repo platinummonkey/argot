@@ -2,7 +2,7 @@
 
 <!-- Badges -->
 ![CI](https://github.com/platinummonkey/argot/actions/workflows/ci.yml/badge.svg)
-![Coverage](https://codecov.io/gh/platinummonkey/argot/branch/main/graph/badge.svg)
+![Coverage](coverage.svg)
 
 Argot is an **agent-first command interface framework for Rust**.
 

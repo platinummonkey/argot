@@ -1,5 +1,6 @@
 #[cfg(feature = "derive")]
 mod tests {
+    #![allow(dead_code)] // derive structs are command descriptors, not data holders
     use argot::ArgotCommand;
 
     #[derive(ArgotCommand)]
