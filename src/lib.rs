@@ -108,8 +108,9 @@ pub use parser::{ParseError, Parser};
 pub use query::{command_to_json_with_fields, command_to_ndjson, CommandEntry, QueryError, Registry};
 pub use render::{
     render_ambiguity, render_completion, render_docs, render_help, render_json_schema,
-    render_markdown, render_resolve_error, render_skill_file, render_skill_files,
-    render_subcommand_list, DefaultRenderer, Renderer, Shell,
+    render_markdown, render_resolve_error, render_skill_file, render_skill_file_with_frontmatter,
+    render_skill_files, render_skill_files_with_frontmatter, render_subcommand_list,
+    DefaultRenderer, Renderer, SkillFrontmatter, Shell,
 };
 pub use resolver::{ResolveError, Resolver};
 

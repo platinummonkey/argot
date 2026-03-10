@@ -29,10 +29,302 @@
 //!   in a [`crate::query::Registry`] (depth-first) and concatenates the results
 //!   separated by `---`.
 //!
+//! - **[`render_skill_file_with_frontmatter`]** — produces an agent-consumable
+//!   Markdown skill file with YAML frontmatter for a single command.
+//!
+//! - **[`render_skill_files_with_frontmatter`]** — renders all skill files in a
+//!   registry, each optionally prepended with YAML frontmatter.
+//!
 //! None of the functions print to stdout/stderr directly; all return a
 //! `String` that the caller can write wherever appropriate.
 
 use crate::model::Command;
+
+/// Optional YAML frontmatter to prepend to a skill file.
+///
+/// When provided to [`render_skill_file_with_frontmatter`], the frontmatter
+/// is serialized as a YAML block between `---` delimiters and prepended
+/// to the Markdown content.
+///
+/// # Example output
+///
+/// ```text
+/// ---
+/// name: deploy
+/// version: 1.0.0
+/// description: Deploy the application
+/// requires_bins:
+///   - mytool
+/// extra:
+///   min_role: "ops"
+/// ---
+///
+/// # Skill: deploy
+/// ...
+/// ```
+///
+/// # Examples
+///
+/// ```
+/// use argot_cmd::render::SkillFrontmatter;
+///
+/// let fm = SkillFrontmatter::new("mytool-deploy")
+///     .version("1.0.0")
+///     .description("Deploy the application")
+///     .requires_bin("mytool");
+///
+/// assert_eq!(fm.name, "mytool-deploy");
+/// assert_eq!(fm.version.as_deref(), Some("1.0.0"));
+/// assert_eq!(fm.requires_bins, vec!["mytool"]);
+/// ```
+#[derive(Debug, Clone)]
+pub struct SkillFrontmatter {
+    /// Skill identifier (e.g. `"mytool-deploy"`). Required.
+    pub name: String,
+    /// Semantic version string (e.g. `"1.0.0"`). Optional.
+    pub version: Option<String>,
+    /// Human-readable description. Optional. Falls back to the command's
+    /// `summary` field when `None` is passed to a render function.
+    pub description: Option<String>,
+    /// Binaries required to use this skill (e.g. `["mytool"]`). Optional.
+    pub requires_bins: Vec<String>,
+    /// Arbitrary extra key/value metadata included under an `extra:` key.
+    /// Values are [`serde_json::Value`].
+    pub extra: std::collections::HashMap<String, serde_json::Value>,
+}
+
+impl SkillFrontmatter {
+    /// Create a new `SkillFrontmatter` with only a required `name`.
+    ///
+    /// All other fields default to `None` / empty.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use argot_cmd::render::SkillFrontmatter;
+    ///
+    /// let fm = SkillFrontmatter::new("my-skill");
+    /// assert_eq!(fm.name, "my-skill");
+    /// assert!(fm.version.is_none());
+    /// ```
+    pub fn new(name: impl Into<String>) -> Self {
+        Self {
+            name: name.into(),
+            version: None,
+            description: None,
+            requires_bins: Vec::new(),
+            extra: std::collections::HashMap::new(),
+        }
+    }
+
+    /// Set the semantic version string (builder style).
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use argot_cmd::render::SkillFrontmatter;
+    ///
+    /// let fm = SkillFrontmatter::new("my-skill").version("2.0.0");
+    /// assert_eq!(fm.version.as_deref(), Some("2.0.0"));
+    /// ```
+    pub fn version(mut self, v: impl Into<String>) -> Self {
+        self.version = Some(v.into());
+        self
+    }
+
+    /// Set the human-readable description (builder style).
+    ///
+    /// When not set, [`render_skill_file_with_frontmatter`] falls back to
+    /// the command's `summary` field.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use argot_cmd::render::SkillFrontmatter;
+    ///
+    /// let fm = SkillFrontmatter::new("my-skill").description("Does things");
+    /// assert_eq!(fm.description.as_deref(), Some("Does things"));
+    /// ```
+    pub fn description(mut self, d: impl Into<String>) -> Self {
+        self.description = Some(d.into());
+        self
+    }
+
+    /// Append a required binary to `requires_bins` (builder style).
+    ///
+    /// May be called multiple times to add several binaries.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use argot_cmd::render::SkillFrontmatter;
+    ///
+    /// let fm = SkillFrontmatter::new("my-skill")
+    ///     .requires_bin("mytool")
+    ///     .requires_bin("jq");
+    /// assert_eq!(fm.requires_bins, vec!["mytool", "jq"]);
+    /// ```
+    pub fn requires_bin(mut self, bin: impl Into<String>) -> Self {
+        self.requires_bins.push(bin.into());
+        self
+    }
+
+    /// Insert an arbitrary key/value pair into `extra` (builder style).
+    ///
+    /// Values are [`serde_json::Value`] so they can represent any JSON-compatible
+    /// type. They are serialized as compact inline JSON in the frontmatter output.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use argot_cmd::render::SkillFrontmatter;
+    ///
+    /// let fm = SkillFrontmatter::new("my-skill")
+    ///     .extra("min_role", serde_json::json!("ops"));
+    /// assert_eq!(fm.extra["min_role"], serde_json::json!("ops"));
+    /// ```
+    pub fn extra(mut self, key: impl Into<String>, value: serde_json::Value) -> Self {
+        self.extra.insert(key.into(), value);
+        self
+    }
+}
+
+/// Serialize a [`SkillFrontmatter`] into a YAML block delimited by `---`.
+///
+/// The serialization is hand-written (no external YAML crate). Fields that are
+/// `None` or empty are omitted.  Extra values are serialized as compact inline
+/// JSON.
+///
+/// The returned string always starts with `---\n` and ends with `---\n`.
+fn render_frontmatter(fm: &SkillFrontmatter, cmd: &Command) -> String {
+    let mut out = String::from("---\n");
+
+    out.push_str(&format!("name: {}\n", fm.name));
+
+    if let Some(ref v) = fm.version {
+        out.push_str(&format!("version: {}\n", v));
+    }
+
+    // description: use explicit value, fall back to cmd.summary
+    let desc = fm
+        .description
+        .as_deref()
+        .filter(|s| !s.is_empty())
+        .or_else(|| {
+            if cmd.summary.is_empty() {
+                None
+            } else {
+                Some(cmd.summary.as_str())
+            }
+        });
+    if let Some(d) = desc {
+        out.push_str(&format!("description: {}\n", d));
+    }
+
+    if !fm.requires_bins.is_empty() {
+        out.push_str("requires_bins:\n");
+        for bin in &fm.requires_bins {
+            out.push_str(&format!("  - {}\n", bin));
+        }
+    }
+
+    if !fm.extra.is_empty() {
+        out.push_str("extra:\n");
+        // Sort keys for deterministic output.
+        let mut keys: Vec<&String> = fm.extra.keys().collect();
+        keys.sort();
+        for key in keys {
+            let value = &fm.extra[key];
+            // Serialize as compact inline JSON.
+            let serialized = value.to_string();
+            out.push_str(&format!("  {}: {}\n", key, serialized));
+        }
+    }
+
+    out.push_str("---\n");
+    out
+}
+
+/// Render a skill file with YAML frontmatter prepended.
+///
+/// The frontmatter is serialized as a YAML block between `---` delimiters and
+/// prepended to the Markdown content produced by [`render_skill_file`].
+///
+/// When `frontmatter.description` is `None`, the command's `summary` field is
+/// used as the `description:` value in the frontmatter.
+///
+/// # Examples
+///
+/// ```
+/// use argot_cmd::{Command, render::{render_skill_file_with_frontmatter, SkillFrontmatter}};
+///
+/// let cmd = Command::builder("deploy")
+///     .summary("Deploy the application")
+///     .build()
+///     .unwrap();
+///
+/// let fm = SkillFrontmatter::new("mytool-deploy")
+///     .version("1.0.0")
+///     .requires_bin("mytool");
+///
+/// let skill = render_skill_file_with_frontmatter(&cmd, &fm);
+/// assert!(skill.starts_with("---\n"));
+/// assert!(skill.contains("name: mytool-deploy"));
+/// assert!(skill.contains("version: 1.0.0"));
+/// assert!(skill.contains("# Skill: deploy"));
+/// ```
+pub fn render_skill_file_with_frontmatter(cmd: &Command, frontmatter: &SkillFrontmatter) -> String {
+    let fm_text = render_frontmatter(frontmatter, cmd);
+    let skill_text = render_skill_file(cmd);
+    format!("{}\n{}", fm_text, skill_text)
+}
+
+/// Render all skill files in the registry, each optionally with its own frontmatter.
+///
+/// `frontmatter_fn` is called with each [`Command`] to produce its frontmatter.
+/// Return `None` to omit frontmatter for that command, falling back to plain
+/// [`render_skill_file`] output. Skill files are separated by `---` lines.
+///
+/// # Examples
+///
+/// ```
+/// use argot_cmd::{Command, Registry, render::{render_skill_files_with_frontmatter, SkillFrontmatter}};
+///
+/// let registry = Registry::new(vec![
+///     Command::builder("deploy").summary("Deploy").build().unwrap(),
+///     Command::builder("status").summary("Show status").build().unwrap(),
+/// ]);
+///
+/// let output = render_skill_files_with_frontmatter(&registry, |cmd| {
+///     Some(SkillFrontmatter::new(format!("mytool-{}", cmd.canonical)))
+/// });
+///
+/// assert!(output.contains("name: mytool-deploy"));
+/// assert!(output.contains("name: mytool-status"));
+/// assert!(output.contains("# Skill: deploy"));
+/// assert!(output.contains("# Skill: status"));
+/// ```
+pub fn render_skill_files_with_frontmatter<F>(
+    registry: &crate::query::Registry,
+    frontmatter_fn: F,
+) -> String
+where
+    F: Fn(&Command) -> Option<SkillFrontmatter>,
+{
+    let entries = registry.iter_all_recursive();
+    let mut parts: Vec<String> = Vec::new();
+
+    for entry in &entries {
+        let cmd = entry.command;
+        let skill = match frontmatter_fn(cmd) {
+            Some(fm) => render_skill_file_with_frontmatter(cmd, &fm),
+            None => render_skill_file(cmd),
+        };
+        parts.push(skill);
+    }
+
+    parts.join("\n---\n\n")
+}
 
 /// A supported shell for completion script generation.
 ///
@@ -107,6 +399,33 @@ pub trait Renderer: Send + Sync {
     fn render_skill_files(&self, registry: &crate::query::Registry) -> String {
         render_skill_files(registry)
     }
+
+    /// Render a skill file with YAML frontmatter prepended.
+    ///
+    /// The default implementation delegates to
+    /// [`render_skill_file_with_frontmatter`].
+    fn render_skill_file_with_frontmatter(
+        &self,
+        cmd: &crate::model::Command,
+        frontmatter: &SkillFrontmatter,
+    ) -> String {
+        render_skill_file_with_frontmatter(cmd, frontmatter)
+    }
+
+    /// Render all skill files in the registry, each optionally with frontmatter.
+    ///
+    /// `frontmatter_fn` is called with each command; returning `None` falls
+    /// back to plain skill file output for that command.
+    ///
+    /// The default implementation delegates to
+    /// [`render_skill_files_with_frontmatter`].
+    fn render_skill_files_with_frontmatter_boxed(
+        &self,
+        registry: &crate::query::Registry,
+        frontmatter_fn: &dyn Fn(&crate::model::Command) -> Option<SkillFrontmatter>,
+    ) -> String {
+        render_skill_files_with_frontmatter(registry, frontmatter_fn)
+    }
 }
 
 /// The default renderer. Delegates to the module-level free functions.
@@ -136,6 +455,20 @@ impl Renderer for DefaultRenderer {
     }
     fn render_skill_files(&self, registry: &crate::query::Registry) -> String {
         render_skill_files(registry)
+    }
+    fn render_skill_file_with_frontmatter(
+        &self,
+        cmd: &crate::model::Command,
+        frontmatter: &SkillFrontmatter,
+    ) -> String {
+        render_skill_file_with_frontmatter(cmd, frontmatter)
+    }
+    fn render_skill_files_with_frontmatter_boxed(
+        &self,
+        registry: &crate::query::Registry,
+        frontmatter_fn: &dyn Fn(&crate::model::Command) -> Option<SkillFrontmatter>,
+    ) -> String {
+        render_skill_files_with_frontmatter(registry, frontmatter_fn)
     }
 }
 
@@ -2025,5 +2358,187 @@ mod tests {
             v["mutating"].is_null(),
             "non-mutating command should not have mutating key in schema"
         );
+    }
+
+    // ── SkillFrontmatter & skill-file render tests ────────────────────────
+
+    #[test]
+    fn test_skill_frontmatter_all_fields() {
+        let cmd = Command::builder("deploy")
+            .summary("Deploy the app")
+            .build()
+            .unwrap();
+        let fm = super::SkillFrontmatter::new("mytool-deploy")
+            .version("1.2.3")
+            .description("Custom description")
+            .requires_bin("mytool")
+            .requires_bin("jq")
+            .extra("min_role", serde_json::json!("ops"))
+            .extra("priority", serde_json::json!(42));
+
+        let text = super::render_frontmatter(&fm, &cmd);
+
+        assert!(text.starts_with("---\n"), "must start with ---");
+        assert!(text.ends_with("---\n"), "must end with ---");
+        assert!(text.contains("name: mytool-deploy\n"));
+        assert!(text.contains("version: 1.2.3\n"));
+        assert!(text.contains("description: Custom description\n"));
+        assert!(text.contains("requires_bins:\n"));
+        assert!(text.contains("  - mytool\n"));
+        assert!(text.contains("  - jq\n"));
+        assert!(text.contains("extra:\n"));
+        // keys are sorted, so min_role before priority
+        assert!(text.contains("  min_role:"));
+        assert!(text.contains("  priority:"));
+    }
+
+    #[test]
+    fn test_skill_frontmatter_version_none_omits_line() {
+        let cmd = Command::builder("ping").build().unwrap();
+        let fm = super::SkillFrontmatter::new("ping");
+        let text = super::render_frontmatter(&fm, &cmd);
+        assert!(!text.contains("version:"), "version line must be omitted");
+    }
+
+    #[test]
+    fn test_skill_frontmatter_requires_bins_empty_omits_block() {
+        let cmd = Command::builder("ping").build().unwrap();
+        let fm = super::SkillFrontmatter::new("ping");
+        let text = super::render_frontmatter(&fm, &cmd);
+        assert!(
+            !text.contains("requires_bins:"),
+            "requires_bins block must be omitted"
+        );
+    }
+
+    #[test]
+    fn test_skill_frontmatter_extra_empty_omits_block() {
+        let cmd = Command::builder("ping").build().unwrap();
+        let fm = super::SkillFrontmatter::new("ping");
+        let text = super::render_frontmatter(&fm, &cmd);
+        assert!(!text.contains("extra:"), "extra block must be omitted");
+    }
+
+    #[test]
+    fn test_skill_frontmatter_description_falls_back_to_cmd_summary() {
+        let cmd = Command::builder("deploy")
+            .summary("Deploy the application")
+            .build()
+            .unwrap();
+        // No description set — should fall back to cmd.summary
+        let fm = super::SkillFrontmatter::new("mytool-deploy");
+        let text = super::render_frontmatter(&fm, &cmd);
+        assert!(
+            text.contains("description: Deploy the application\n"),
+            "should fall back to cmd summary"
+        );
+    }
+
+    #[test]
+    fn test_skill_frontmatter_description_explicit_overrides_summary() {
+        let cmd = Command::builder("deploy")
+            .summary("Deploy the application")
+            .build()
+            .unwrap();
+        let fm = super::SkillFrontmatter::new("mytool-deploy")
+            .description("My custom description");
+        let text = super::render_frontmatter(&fm, &cmd);
+        assert!(text.contains("description: My custom description\n"));
+        assert!(!text.contains("Deploy the application"));
+    }
+
+    #[test]
+    fn test_render_skill_file_with_frontmatter_starts_with_dashes() {
+        let cmd = Command::builder("deploy")
+            .summary("Deploy the app")
+            .build()
+            .unwrap();
+        let fm = super::SkillFrontmatter::new("mytool-deploy").version("1.0.0");
+        let skill = render_skill_file_with_frontmatter(&cmd, &fm);
+        assert!(
+            skill.starts_with("---\n"),
+            "skill file with frontmatter must start with ---\\n"
+        );
+        assert!(skill.contains("name: mytool-deploy\n"));
+        assert!(skill.contains("version: 1.0.0\n"));
+        assert!(skill.contains("# Skill: deploy"));
+    }
+
+    #[test]
+    fn test_render_skill_file_basic() {
+        let cmd = Command::builder("deploy")
+            .summary("Deploy the app")
+            .build()
+            .unwrap();
+        let skill = render_skill_file(&cmd);
+        assert!(skill.starts_with("# Skill: deploy"));
+        assert!(skill.contains("Deploy the app"));
+    }
+
+    #[test]
+    fn test_render_skill_files_with_frontmatter_none_falls_back_to_plain() {
+        use crate::query::Registry;
+        let registry = Registry::new(vec![
+            Command::builder("deploy").summary("Deploy").build().unwrap(),
+            Command::builder("status").summary("Status").build().unwrap(),
+        ]);
+        // Return None for "status" → plain skill file; Some for "deploy"
+        let output = render_skill_files_with_frontmatter(&registry, |cmd| {
+            if cmd.canonical == "deploy" {
+                Some(super::SkillFrontmatter::new("mytool-deploy"))
+            } else {
+                None
+            }
+        });
+        assert!(output.contains("name: mytool-deploy"), "deploy has frontmatter");
+        assert!(output.contains("# Skill: deploy"));
+        assert!(output.contains("# Skill: status"));
+        // status should NOT have a frontmatter name line
+        let status_part = output
+            .split("# Skill: status")
+            .next()
+            .unwrap_or("")
+            .rsplit("---")
+            .next()
+            .unwrap_or("");
+        assert!(
+            !status_part.contains("name: mytool-status"),
+            "status must not have frontmatter"
+        );
+    }
+
+    #[test]
+    fn test_render_skill_files_with_frontmatter_all_with_fm() {
+        use crate::query::Registry;
+        let registry = Registry::new(vec![
+            Command::builder("deploy").summary("Deploy").build().unwrap(),
+            Command::builder("status").summary("Status").build().unwrap(),
+        ]);
+        let output = render_skill_files_with_frontmatter(&registry, |cmd| {
+            Some(super::SkillFrontmatter::new(format!("tool-{}", cmd.canonical)))
+        });
+        assert!(output.contains("name: tool-deploy"));
+        assert!(output.contains("name: tool-status"));
+    }
+
+    #[test]
+    fn test_default_renderer_skill_frontmatter_delegation() {
+        use crate::query::Registry;
+        let cmd = Command::builder("deploy")
+            .summary("Deploy the app")
+            .build()
+            .unwrap();
+        let registry = Registry::new(vec![cmd.clone()]);
+        let renderer = DefaultRenderer;
+
+        let fm = super::SkillFrontmatter::new("mytool-deploy").version("1.0.0");
+        let single = renderer.render_skill_file_with_frontmatter(&cmd, &fm);
+        assert!(single.starts_with("---\n"));
+        assert!(single.contains("name: mytool-deploy"));
+
+        let all = renderer.render_skill_files_with_frontmatter_boxed(&registry, &|c| {
+            Some(super::SkillFrontmatter::new(format!("t-{}", c.canonical)))
+        });
+        assert!(all.contains("name: t-deploy"));
     }
 }
