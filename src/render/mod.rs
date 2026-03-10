@@ -20,6 +20,15 @@
 //!   commands in a [`crate::query::Registry`], with a table of contents and
 //!   per-command sections separated by `---`.
 //!
+//! - **[`render_skill_file`]** — produces a structured Markdown skill file for
+//!   a single command, encoding best practices, anti-patterns, and examples in
+//!   a format suitable for loading into an AI agent context (e.g.
+//!   `.claude/commands/`).
+//!
+//! - **[`render_skill_files`]** — calls [`render_skill_file`] on every command
+//!   in a [`crate::query::Registry`] (depth-first) and concatenates the results
+//!   separated by `---`.
+//!
 //! None of the functions print to stdout/stderr directly; all return a
 //! `String` that the caller can write wherever appropriate.
 
@@ -83,6 +92,21 @@ pub trait Renderer: Send + Sync {
     fn render_docs(&self, registry: &crate::query::Registry) -> String {
         render_docs(registry)
     }
+    /// Render a structured Markdown skill file for a single command.
+    ///
+    /// Skill files encode invariants, gotchas, best practices, anti-patterns,
+    /// and examples in a format suitable for loading into an AI agent context
+    /// (e.g. `.claude/commands/`). Sections with no content are omitted.
+    fn render_skill_file(&self, command: &crate::model::Command) -> String {
+        render_skill_file(command)
+    }
+    /// Render skill files for all commands in a registry.
+    ///
+    /// Calls [`render_skill_file`] on every command in depth-first order and
+    /// concatenates the results separated by `---\n\n`.
+    fn render_skill_files(&self, registry: &crate::query::Registry) -> String {
+        render_skill_files(registry)
+    }
 }
 
 /// The default renderer. Delegates to the module-level free functions.
@@ -106,6 +130,12 @@ impl Renderer for DefaultRenderer {
     }
     fn render_docs(&self, registry: &crate::query::Registry) -> String {
         render_docs(registry)
+    }
+    fn render_skill_file(&self, command: &crate::model::Command) -> String {
+        render_skill_file(command)
+    }
+    fn render_skill_files(&self, registry: &crate::query::Registry) -> String {
+        render_skill_files(registry)
     }
 }
 
@@ -807,6 +837,166 @@ pub fn render_docs(registry: &crate::query::Registry) -> String {
     out
 }
 
+/// Render a structured Markdown skill file for a single command.
+///
+/// Skill files encode best practices, anti-patterns, and examples in a format
+/// suitable for loading into an AI agent context (e.g. `.claude/commands/`).
+/// Only sections that have content are emitted — empty best_practices, empty
+/// anti_patterns, no arguments, etc. are silently omitted.
+///
+/// # Arguments
+///
+/// - `command` — The command to produce a skill file for.
+///
+/// # Examples
+///
+/// ```
+/// # use argot_cmd::{Command, render::render_skill_file};
+/// let cmd = Command::builder("deploy")
+///     .summary("Deploy the application")
+///     .best_practice("always dry-run first")
+///     .anti_pattern("deploy on Friday")
+///     .build()
+///     .unwrap();
+///
+/// let skill = render_skill_file(&cmd);
+/// assert!(skill.contains("# Skill: deploy"));
+/// assert!(skill.contains("## Safe Usage"));
+/// assert!(skill.contains("## Avoid"));
+/// ```
+pub fn render_skill_file(command: &Command) -> String {
+    let mut out = String::new();
+
+    // Heading
+    out.push_str(&format!("# Skill: {}\n\n", command.canonical));
+
+    // Summary
+    if !command.summary.is_empty() {
+        out.push_str(&format!("{}\n\n", command.summary));
+    }
+
+    // Description
+    if !command.description.is_empty() {
+        out.push_str(&format!("{}\n\n", command.description));
+    }
+
+    // Safe Usage (best practices)
+    if !command.best_practices.is_empty() {
+        out.push_str("## Safe Usage\n\nAlways prefer:\n");
+        for bp in &command.best_practices {
+            out.push_str(&format!("- {}\n", bp));
+        }
+        out.push('\n');
+    }
+
+    // Avoid (anti-patterns)
+    if !command.anti_patterns.is_empty() {
+        out.push_str("## Avoid\n\n");
+        for ap in &command.anti_patterns {
+            out.push_str(&format!("- {}\n", ap));
+        }
+        out.push('\n');
+    }
+
+    // Arguments table
+    if !command.arguments.is_empty() {
+        out.push_str("## Arguments\n\n");
+        out.push_str("| Name | Required | Description |\n");
+        out.push_str("|------|----------|-------------|\n");
+        for arg in &command.arguments {
+            let req = if arg.required { "yes" } else { "no" };
+            out.push_str(&format!(
+                "| {} | {} | {} |\n",
+                arg.name, req, arg.description
+            ));
+        }
+        out.push('\n');
+    }
+
+    // Flags table
+    if !command.flags.is_empty() {
+        out.push_str("## Flags\n\n");
+        out.push_str("| Flag | Short | Required | Default | Description |\n");
+        out.push_str("|------|-------|----------|---------|-------------|\n");
+        for flag in &command.flags {
+            let short = flag
+                .short
+                .map(|c| format!("-{}", c))
+                .unwrap_or_else(|| "—".to_string());
+            let req = if flag.required { "yes" } else { "no" };
+            let default = flag
+                .default
+                .as_deref()
+                .unwrap_or("—");
+            out.push_str(&format!(
+                "| --{} | {} | {} | {} | {} |\n",
+                flag.name, short, req, default, flag.description
+            ));
+        }
+        out.push('\n');
+    }
+
+    // Examples
+    if !command.examples.is_empty() {
+        out.push_str("## Examples\n\n");
+        for ex in &command.examples {
+            out.push_str(&format!("```\n{}\n```\n", ex.command));
+            out.push_str(&format!("> {}\n\n", ex.description));
+        }
+    }
+
+    // Subcommands
+    if !command.subcommands.is_empty() {
+        out.push_str("## Subcommands\n\n");
+        for sub in &command.subcommands {
+            out.push_str(&format!("- `{}` — {}\n", sub.canonical, sub.summary));
+        }
+        out.push('\n');
+    }
+
+    out
+}
+
+/// Render skill files for every command in a registry.
+///
+/// Calls [`render_skill_file`] on every command in depth-first order via
+/// [`crate::query::Registry::iter_all_recursive`] and concatenates the results
+/// separated by `---\n\n`.
+///
+/// # Arguments
+///
+/// - `registry` — The registry whose commands should be documented as skill files.
+///
+/// # Examples
+///
+/// ```
+/// # use argot_cmd::{Command, Registry, render::render_skill_files};
+/// let registry = Registry::new(vec![
+///     Command::builder("deploy")
+///         .summary("Deploy the application")
+///         .best_practice("always dry-run first")
+///         .build()
+///         .unwrap(),
+///     Command::builder("status")
+///         .summary("Show status")
+///         .build()
+///         .unwrap(),
+/// ]);
+///
+/// let skills = render_skill_files(&registry);
+/// assert!(skills.contains("# Skill: deploy"));
+/// assert!(skills.contains("# Skill: status"));
+/// assert!(skills.contains("---"));
+/// ```
+pub fn render_skill_files(registry: &crate::query::Registry) -> String {
+    let entries = registry.iter_all_recursive();
+    let parts: Vec<String> = entries
+        .iter()
+        .map(|entry| render_skill_file(entry.command))
+        .collect();
+    parts.join("---\n\n")
+}
+
 fn build_usage(command: &Command) -> String {
     let mut parts = vec![command.canonical.clone()];
     if !command.subcommands.is_empty() {
@@ -1419,5 +1609,292 @@ mod tests {
         let md = render_markdown(&cmd);
         assert!(md.contains("## Subcommands"));
         assert!(md.contains("**add**"));
+    }
+
+    // -----------------------------------------------------------------------
+    // render_skill_file tests
+    // -----------------------------------------------------------------------
+
+    fn skill_full_command() -> Command {
+        Command::builder("deploy")
+            .summary("Deploy the application")
+            .description("Deploys the app to the target environment.")
+            .argument(
+                Argument::builder("env")
+                    .description("Target environment")
+                    .required()
+                    .build()
+                    .unwrap(),
+            )
+            .flag(
+                Flag::builder("dry-run")
+                    .short('n')
+                    .description("Simulate without changes")
+                    .build()
+                    .unwrap(),
+            )
+            .flag(
+                Flag::builder("strategy")
+                    .takes_value()
+                    .default_value("rolling")
+                    .description("Rollout strategy")
+                    .build()
+                    .unwrap(),
+            )
+            .subcommand(
+                Command::builder("rollback")
+                    .summary("Roll back a deployment")
+                    .build()
+                    .unwrap(),
+            )
+            .example(Example::new("deploy to prod", "deploy prod"))
+            .example(
+                Example::new("dry-run deploy", "deploy prod --dry-run")
+                    .with_output("Would deploy to prod"),
+            )
+            .best_practice("always dry-run first")
+            .best_practice("pin the image tag")
+            .anti_pattern("deploy on Friday")
+            .anti_pattern("skip the dry-run")
+            .build()
+            .unwrap()
+    }
+
+    #[test]
+    fn test_render_skill_file_heading() {
+        let cmd = skill_full_command();
+        let skill = render_skill_file(&cmd);
+        assert!(
+            skill.starts_with("# Skill: deploy\n"),
+            "skill file must start with '# Skill: deploy'"
+        );
+    }
+
+    #[test]
+    fn test_render_skill_file_summary_and_description() {
+        let cmd = skill_full_command();
+        let skill = render_skill_file(&cmd);
+        assert!(skill.contains("Deploy the application"), "missing summary");
+        assert!(
+            skill.contains("Deploys the app to the target environment."),
+            "missing description"
+        );
+    }
+
+    #[test]
+    fn test_render_skill_file_safe_usage_section() {
+        let cmd = skill_full_command();
+        let skill = render_skill_file(&cmd);
+        assert!(skill.contains("## Safe Usage"), "missing Safe Usage section");
+        assert!(skill.contains("Always prefer:"), "missing 'Always prefer:' line");
+        assert!(
+            skill.contains("- always dry-run first"),
+            "missing first best practice"
+        );
+        assert!(
+            skill.contains("- pin the image tag"),
+            "missing second best practice"
+        );
+    }
+
+    #[test]
+    fn test_render_skill_file_avoid_section() {
+        let cmd = skill_full_command();
+        let skill = render_skill_file(&cmd);
+        assert!(skill.contains("## Avoid"), "missing Avoid section");
+        assert!(
+            skill.contains("- deploy on Friday"),
+            "missing first anti-pattern"
+        );
+        assert!(
+            skill.contains("- skip the dry-run"),
+            "missing second anti-pattern"
+        );
+    }
+
+    #[test]
+    fn test_render_skill_file_arguments_table() {
+        let cmd = skill_full_command();
+        let skill = render_skill_file(&cmd);
+        assert!(skill.contains("## Arguments"), "missing Arguments section");
+        assert!(
+            skill.contains("| env | yes | Target environment |"),
+            "missing env argument row"
+        );
+    }
+
+    #[test]
+    fn test_render_skill_file_flags_table() {
+        let cmd = skill_full_command();
+        let skill = render_skill_file(&cmd);
+        assert!(skill.contains("## Flags"), "missing Flags section");
+        // dry-run has short -n, not required, no default
+        assert!(
+            skill.contains("| --dry-run | -n | no | — | Simulate without changes |"),
+            "missing dry-run flag row"
+        );
+        // strategy has no short, not required, default = rolling
+        assert!(
+            skill.contains("| --strategy | — | no | rolling | Rollout strategy |"),
+            "missing strategy flag row"
+        );
+    }
+
+    #[test]
+    fn test_render_skill_file_examples_section() {
+        let cmd = skill_full_command();
+        let skill = render_skill_file(&cmd);
+        assert!(skill.contains("## Examples"), "missing Examples section");
+        assert!(skill.contains("```\ndeploy prod\n```"), "missing first example code block");
+        assert!(skill.contains("> deploy to prod"), "missing first example description");
+        assert!(
+            skill.contains("```\ndeploy prod --dry-run\n```"),
+            "missing second example code block"
+        );
+        assert!(
+            skill.contains("> dry-run deploy"),
+            "missing second example description"
+        );
+    }
+
+    #[test]
+    fn test_render_skill_file_subcommands_section() {
+        let cmd = skill_full_command();
+        let skill = render_skill_file(&cmd);
+        assert!(skill.contains("## Subcommands"), "missing Subcommands section");
+        assert!(
+            skill.contains("- `rollback` — Roll back a deployment"),
+            "missing rollback subcommand entry"
+        );
+    }
+
+    #[test]
+    fn test_render_skill_file_omits_empty_sections() {
+        // Minimal command: no best_practices, anti_patterns, args, flags, examples, subcommands
+        let cmd = Command::builder("ping")
+            .summary("Check connectivity")
+            .build()
+            .unwrap();
+        let skill = render_skill_file(&cmd);
+        assert!(skill.contains("# Skill: ping"), "missing heading");
+        assert!(skill.contains("Check connectivity"), "missing summary");
+        assert!(!skill.contains("## Safe Usage"), "Safe Usage must be omitted");
+        assert!(!skill.contains("## Avoid"), "Avoid must be omitted");
+        assert!(!skill.contains("## Arguments"), "Arguments must be omitted");
+        assert!(!skill.contains("## Flags"), "Flags must be omitted");
+        assert!(!skill.contains("## Examples"), "Examples must be omitted");
+        assert!(!skill.contains("## Subcommands"), "Subcommands must be omitted");
+    }
+
+    #[test]
+    fn test_render_skill_file_no_summary_or_description() {
+        let cmd = Command::builder("ping").build().unwrap();
+        let skill = render_skill_file(&cmd);
+        // Should still produce a valid heading and not panic
+        assert!(skill.starts_with("# Skill: ping\n"));
+    }
+
+    #[test]
+    fn test_render_skill_file_flag_required_shown() {
+        let cmd = Command::builder("deploy")
+            .flag(
+                Flag::builder("env")
+                    .takes_value()
+                    .required()
+                    .description("Target environment")
+                    .build()
+                    .unwrap(),
+            )
+            .build()
+            .unwrap();
+        let skill = render_skill_file(&cmd);
+        assert!(
+            skill.contains("| --env | — | yes | — | Target environment |"),
+            "required flag must show 'yes' in Required column"
+        );
+    }
+
+    // -----------------------------------------------------------------------
+    // render_skill_files tests
+    // -----------------------------------------------------------------------
+
+    fn skill_registry() -> crate::query::Registry {
+        use crate::query::Registry;
+        Registry::new(vec![
+            Command::builder("deploy")
+                .summary("Deploy the application")
+                .best_practice("always dry-run first")
+                .subcommand(
+                    Command::builder("rollback")
+                        .summary("Roll back a deployment")
+                        .build()
+                        .unwrap(),
+                )
+                .build()
+                .unwrap(),
+            Command::builder("status")
+                .summary("Show status")
+                .build()
+                .unwrap(),
+        ])
+    }
+
+    #[test]
+    fn test_render_skill_files_contains_all_commands() {
+        let reg = skill_registry();
+        let skills = render_skill_files(&reg);
+        assert!(skills.contains("# Skill: deploy"), "missing deploy skill");
+        assert!(skills.contains("# Skill: rollback"), "missing rollback skill");
+        assert!(skills.contains("# Skill: status"), "missing status skill");
+    }
+
+    #[test]
+    fn test_render_skill_files_separated_by_separator() {
+        let reg = skill_registry();
+        let skills = render_skill_files(&reg);
+        assert!(skills.contains("---\n\n"), "skill files must be separated by '---'");
+    }
+
+    #[test]
+    fn test_render_skill_files_empty_registry() {
+        use crate::query::Registry;
+        let reg = Registry::new(vec![]);
+        let skills = render_skill_files(&reg);
+        // Empty registry yields an empty string (no separators, no content)
+        assert!(skills.is_empty(), "empty registry must yield empty skill files string");
+    }
+
+    #[test]
+    fn test_render_skill_files_single_command_no_separator() {
+        use crate::query::Registry;
+        let reg = Registry::new(vec![
+            Command::builder("ping").summary("Ping").build().unwrap(),
+        ]);
+        let skills = render_skill_files(&reg);
+        assert!(skills.contains("# Skill: ping"));
+        // Single command: no separator expected
+        assert!(!skills.contains("---"), "single command must not produce separator");
+    }
+
+    #[test]
+    fn test_default_renderer_render_skill_file() {
+        let cmd = Command::builder("deploy")
+            .summary("Deploy")
+            .best_practice("dry-run first")
+            .build()
+            .unwrap();
+        let renderer = DefaultRenderer;
+        let skill = renderer.render_skill_file(&cmd);
+        assert!(skill.contains("# Skill: deploy"));
+        assert!(skill.contains("## Safe Usage"));
+    }
+
+    #[test]
+    fn test_default_renderer_render_skill_files() {
+        let reg = skill_registry();
+        let renderer = DefaultRenderer;
+        let skills = renderer.render_skill_files(&reg);
+        assert!(skills.contains("# Skill: deploy"));
+        assert!(skills.contains("# Skill: status"));
     }
 }

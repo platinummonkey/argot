@@ -108,8 +108,8 @@ pub use parser::{ParseError, Parser};
 pub use query::{CommandEntry, QueryError, Registry};
 pub use render::{
     render_ambiguity, render_completion, render_docs, render_help, render_json_schema,
-    render_markdown, render_resolve_error, render_subcommand_list, DefaultRenderer, Renderer,
-    Shell,
+    render_markdown, render_resolve_error, render_skill_file, render_skill_files,
+    render_subcommand_list, DefaultRenderer, Renderer, Shell,
 };
 pub use resolver::{ResolveError, Resolver};
 
