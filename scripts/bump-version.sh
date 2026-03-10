@@ -112,7 +112,7 @@ fi
 
 if [[ "$OLD_CONSTRAINT" != "$NEW_CONSTRAINT" ]]; then
     echo "Updating argot-cmd-derive version constraint: \"${OLD_CONSTRAINT}\" → \"${NEW_CONSTRAINT}\""
-    perl -i -pe "s/(argot-cmd-derive\s*=\s*\{[^}]*version\s*=\s*\")${OLD_CONSTRAINT}(\")/${1}${NEW_CONSTRAINT}${2}/" Cargo.toml
+    perl -i -pe 's/(argot-cmd-derive\s*=\s*\{[^}]*version\s*=\s*")'"${OLD_CONSTRAINT}"'(")/${1}'"${NEW_CONSTRAINT}"'${2}/' Cargo.toml
 fi
 
 # ── Update Cargo.lock ──────────────────────────────────────────────────────────
