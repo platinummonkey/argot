@@ -431,6 +431,28 @@ pub struct Command {
     /// Validated at build time (flags must exist) and enforced at parse time.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub exclusive_groups: Vec<Vec<String>>,
+    /// Whether this command mutates state (creates, updates, or deletes resources).
+    ///
+    /// Set to `true` for commands that are not safe to run freely without
+    /// a `--dry-run` preview first. AI agents use this field to decide
+    /// whether they need explicit user confirmation before dispatching.
+    ///
+    /// Use [`CommandBuilder::mutating`] to set this field.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use argot_cmd::Command;
+    /// let cmd = Command::builder("delete")
+    ///     .summary("Delete a resource")
+    ///     .mutating()
+    ///     .build()
+    ///     .unwrap();
+    ///
+    /// assert!(cmd.mutating);
+    /// ```
+    #[serde(default)]
+    pub mutating: bool,
 }
 
 impl std::fmt::Debug for Command {
@@ -456,6 +478,7 @@ impl std::fmt::Debug for Command {
         );
         ds.field("extra", &self.extra)
             .field("exclusive_groups", &self.exclusive_groups)
+            .field("mutating", &self.mutating)
             .finish()
     }
 }
@@ -476,6 +499,7 @@ impl PartialEq for Command {
             && self.semantic_aliases == other.semantic_aliases
             && self.extra == other.extra
             && self.exclusive_groups == other.exclusive_groups
+            && self.mutating == other.mutating
     }
 }
 
@@ -506,6 +530,7 @@ impl std::hash::Hash for Command {
             }
         }
         self.exclusive_groups.hash(state);
+        self.mutating.hash(state);
     }
 }
 
@@ -559,6 +584,7 @@ impl Command {
             async_handler: None,
             extra: HashMap::new(),
             exclusive_groups: Vec::new(),
+            mutating: false,
         }
     }
 
@@ -621,6 +647,7 @@ pub struct CommandBuilder {
     async_handler: Option<AsyncHandlerFn>,
     extra: HashMap<String, serde_json::Value>,
     exclusive_groups: Vec<Vec<String>>,
+    mutating: bool,
 }
 
 impl CommandBuilder {
@@ -863,6 +890,29 @@ impl CommandBuilder {
         self
     }
 
+    /// Mark this command as mutating (i.e., it modifies state).
+    ///
+    /// Mutating commands are flagged in help output and JSON schema so that
+    /// AI agents know they should exercise caution — typically by running a
+    /// `--dry-run` first — before dispatching the command.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use argot_cmd::Command;
+    /// let cmd = Command::builder("delete")
+    ///     .summary("Delete a resource")
+    ///     .mutating()
+    ///     .build()
+    ///     .unwrap();
+    ///
+    /// assert!(cmd.mutating);
+    /// ```
+    pub fn mutating(mut self) -> Self {
+        self.mutating = true;
+        self
+    }
+
     /// Consume the builder and return a [`Command`].
     ///
     /// # Errors
@@ -991,6 +1041,7 @@ impl CommandBuilder {
             async_handler: self.async_handler,
             extra: self.extra,
             exclusive_groups: self.exclusive_groups,
+            mutating: self.mutating,
         })
     }
 }
@@ -1426,5 +1477,40 @@ mod tests {
         let parsed = parser.parse(&["cmd", "--tag=alpha", "--tag=beta"]).unwrap();
         let values = parsed.flag_values("tag");
         assert_eq!(values, vec!["alpha", "beta"]);
+    }
+
+    #[test]
+    fn test_mutating_builder_sets_field() {
+        let non_mutating = Command::builder("list").build().unwrap();
+        assert!(!non_mutating.mutating, "default should be non-mutating");
+
+        let mutating = Command::builder("delete")
+            .summary("Delete a resource")
+            .mutating()
+            .build()
+            .unwrap();
+        assert!(mutating.mutating, "mutating() should set mutating to true");
+    }
+
+    #[test]
+    fn test_mutating_serde_round_trip() {
+        let cmd = Command::builder("delete")
+            .summary("Delete a resource")
+            .mutating()
+            .build()
+            .unwrap();
+        let json = serde_json::to_string(&cmd).unwrap();
+        assert!(json.contains("\"mutating\":true"), "JSON should include mutating:true");
+        let de: Command = serde_json::from_str(&json).unwrap();
+        assert!(de.mutating, "deserialized command should have mutating=true");
+    }
+
+    #[test]
+    fn test_non_mutating_serde_default() {
+        let cmd = Command::builder("list").build().unwrap();
+        let json = serde_json::to_string(&cmd).unwrap();
+        // With #[serde(default)], false is still serialized (no skip_serializing_if)
+        let de: Command = serde_json::from_str(&json).unwrap();
+        assert!(!de.mutating, "deserialized non-mutating command should have mutating=false");
     }
 }

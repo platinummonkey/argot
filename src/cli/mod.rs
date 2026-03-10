@@ -96,6 +96,9 @@ pub struct Cli {
     middlewares: Vec<Box<dyn crate::middleware::Middleware>>,
     renderer: Box<dyn Renderer>,
     query_support: bool,
+    /// When `true`, a warning is emitted to stderr at dispatch time for mutating
+    /// commands that have no `--dry-run` flag defined.
+    warn_missing_dry_run: bool,
 }
 
 impl Cli {
@@ -113,6 +116,7 @@ impl Cli {
             middlewares: vec![],
             renderer: Box::new(DefaultRenderer),
             query_support: false,
+            warn_missing_dry_run: false,
         }
     }
 
@@ -227,6 +231,41 @@ impl Cli {
         self
     }
 
+    /// Enable advisory warnings for mutating commands that have no `--dry-run` flag.
+    ///
+    /// When enabled (default: off), `Cli::run` (and `Cli::run_async`) will emit a
+    /// warning to stderr before dispatching a mutating command that has no `--dry-run`
+    /// flag defined on it:
+    ///
+    /// ```text
+    /// warning: mutating command 'delete' has no --dry-run flag defined
+    /// ```
+    ///
+    /// This is an advisory lint, not a hard error. It helps developers notice
+    /// missing safety flags while building CLIs with argot.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use std::sync::Arc;
+    /// use argot_cmd::{Cli, Command};
+    ///
+    /// let cli = Cli::new(vec![
+    ///     Command::builder("delete")
+    ///         .summary("Delete a resource")
+    ///         .mutating()
+    ///         .handler(Arc::new(|_| Ok(())))
+    ///         .build()
+    ///         .unwrap(),
+    /// ])
+    /// .warn_missing_dry_run(true);
+    /// // Running `delete` will now emit a warning to stderr.
+    /// ```
+    pub fn warn_missing_dry_run(mut self, enabled: bool) -> Self {
+        self.warn_missing_dry_run = enabled;
+        self
+    }
+
     /// Parse and dispatch a command from an iterator of string arguments.
     ///
     /// The iterator should **not** include the program name (`argv[0]`).
@@ -312,6 +351,17 @@ impl Cli {
         let parser = Parser::new(self.registry.commands());
         match parser.parse(&argv_refs) {
             Ok(parsed) => {
+                // Advisory warning: mutating command without --dry-run flag
+                if self.warn_missing_dry_run
+                    && parsed.command.mutating
+                    && !parsed.command.flags.iter().any(|f| f.name == "dry-run")
+                {
+                    eprintln!(
+                        "warning: mutating command '{}' has no --dry-run flag defined",
+                        parsed.command.canonical
+                    );
+                }
+
                 // Before dispatch: run middleware hooks
                 for mw in &self.middlewares {
                     mw.before_dispatch(&parsed).map_err(CliError::Handler)?;
@@ -512,6 +562,17 @@ impl Cli {
         let parser = Parser::new(self.registry.commands());
         match parser.parse(&argv) {
             Ok(parsed) => {
+                // Advisory warning: mutating command without --dry-run flag
+                if self.warn_missing_dry_run
+                    && parsed.command.mutating
+                    && !parsed.command.flags.iter().any(|f| f.name == "dry-run")
+                {
+                    eprintln!(
+                        "warning: mutating command '{}' has no --dry-run flag defined",
+                        parsed.command.canonical
+                    );
+                }
+
                 // Before dispatch: run middleware hooks
                 for mw in &self.middlewares {
                     mw.before_dispatch(&parsed).map_err(CliError::Handler)?;
@@ -1041,6 +1102,73 @@ mod tests {
             "query examples for unknown command should return Err, got {:?}",
             result
         );
+    }
+
+    #[test]
+    fn test_warn_missing_dry_run_enabled_dispatches_ok() {
+        // warn_missing_dry_run should not prevent dispatch — it is advisory only.
+        use crate::model::Command;
+        use std::sync::atomic::{AtomicBool, Ordering};
+        use std::sync::Arc;
+
+        let called = Arc::new(AtomicBool::new(false));
+        let called2 = called.clone();
+
+        let cmd = Command::builder("delete")
+            .summary("Delete a resource")
+            .mutating()
+            .handler(Arc::new(move |_| {
+                called2.store(true, Ordering::SeqCst);
+                Ok(())
+            }))
+            .build()
+            .unwrap();
+
+        let cli = super::Cli::new(vec![cmd]).warn_missing_dry_run(true);
+        // Dispatch should succeed even though there's no --dry-run flag.
+        let result = cli.run(["delete"]);
+        assert!(result.is_ok(), "dispatch should succeed, got {:?}", result);
+        assert!(called.load(Ordering::SeqCst), "handler should have been called");
+    }
+
+    #[test]
+    fn test_warn_missing_dry_run_with_dry_run_flag_no_warn() {
+        // Even with warn enabled, a command that has --dry-run should not warn.
+        use crate::model::{Command, Flag};
+        use std::sync::Arc;
+
+        let cmd = Command::builder("delete")
+            .summary("Delete a resource")
+            .mutating()
+            .flag(Flag::builder("dry-run").description("Simulate").build().unwrap())
+            .handler(Arc::new(|_| Ok(())))
+            .build()
+            .unwrap();
+
+        let cli = super::Cli::new(vec![cmd]).warn_missing_dry_run(true);
+        // This test verifies the code path doesn't crash; we can't easily
+        // capture stderr in unit tests, but the absence of a panic is the key check.
+        let result = cli.run(["delete"]);
+        assert!(result.is_ok(), "dispatch should succeed, got {:?}", result);
+    }
+
+    #[test]
+    fn test_warn_missing_dry_run_disabled_no_effect() {
+        // With warn disabled (default), mutating commands without --dry-run are fine.
+        use crate::model::Command;
+        use std::sync::Arc;
+
+        let cmd = Command::builder("delete")
+            .summary("Delete a resource")
+            .mutating()
+            .handler(Arc::new(|_| Ok(())))
+            .build()
+            .unwrap();
+
+        // Default: warn_missing_dry_run is false.
+        let cli = super::Cli::new(vec![cmd]);
+        let result = cli.run(["delete"]);
+        assert!(result.is_ok(), "dispatch should succeed, got {:?}", result);
     }
 
     // ── Async unit tests ──────────────────────────────────────────────────────

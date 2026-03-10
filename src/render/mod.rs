@@ -178,6 +178,17 @@ pub fn render_help(command: &Command) -> String {
         out.push_str(&format!("SUMMARY\n    {}\n\n", command.summary));
     }
 
+    if command.mutating {
+        out.push_str("⚠  MUTATING COMMAND\n");
+        let has_dry_run = command.flags.iter().any(|f| f.name == "dry-run");
+        if !has_dry_run {
+            out.push_str(
+                "  This command modifies state. Consider adding --dry-run support.\n",
+            );
+        }
+        out.push('\n');
+    }
+
     if !command.description.is_empty() {
         out.push_str(&format!("DESCRIPTION\n    {}\n\n", command.description));
     }
@@ -309,6 +320,12 @@ pub fn render_markdown(command: &Command) -> String {
 
     if !command.summary.is_empty() {
         out.push_str(&format!("{}\n\n", command.summary));
+    }
+
+    if command.mutating {
+        out.push_str(
+            "> ⚠ **Mutating command** — this operation modifies state.\n\n",
+        );
     }
 
     if !command.description.is_empty() {
@@ -775,6 +792,10 @@ pub fn render_json_schema(command: &Command) -> Result<String, serde_json::Error
 
     if !required.is_empty() {
         schema["required"] = Value::Array(required);
+    }
+
+    if command.mutating {
+        schema["mutating"] = json!(true);
     }
 
     serde_json::to_string_pretty(&schema)
@@ -1611,6 +1632,7 @@ mod tests {
         assert!(md.contains("**add**"));
     }
 
+<<<<<<< HEAD
     // -----------------------------------------------------------------------
     // render_skill_file tests
     // -----------------------------------------------------------------------
@@ -1896,5 +1918,113 @@ mod tests {
         let skills = renderer.render_skill_files(&reg);
         assert!(skills.contains("# Skill: deploy"));
         assert!(skills.contains("# Skill: status"));
+    }
+
+    // -----------------------------------------------------------------------
+    // mutating annotation render tests
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_render_help_mutating_shows_warning() {
+        let cmd = Command::builder("delete")
+            .summary("Delete a resource")
+            .mutating()
+            .build()
+            .unwrap();
+        let help = render_help(&cmd);
+        assert!(
+            help.contains("MUTATING COMMAND"),
+            "help should contain MUTATING COMMAND notice"
+        );
+        assert!(
+            help.contains("Consider adding --dry-run support"),
+            "help should suggest --dry-run when flag is absent"
+        );
+    }
+
+    #[test]
+    fn test_render_help_mutating_with_dry_run_no_note() {
+        let cmd = Command::builder("delete")
+            .summary("Delete a resource")
+            .flag(Flag::builder("dry-run").description("Simulate only").build().unwrap())
+            .mutating()
+            .build()
+            .unwrap();
+        let help = render_help(&cmd);
+        assert!(
+            help.contains("MUTATING COMMAND"),
+            "help should still show MUTATING COMMAND"
+        );
+        assert!(
+            !help.contains("Consider adding --dry-run support"),
+            "help should not suggest --dry-run when flag is already present"
+        );
+    }
+
+    #[test]
+    fn test_render_help_non_mutating_no_warning() {
+        let cmd = Command::builder("list")
+            .summary("List resources")
+            .build()
+            .unwrap();
+        let help = render_help(&cmd);
+        assert!(
+            !help.contains("MUTATING COMMAND"),
+            "non-mutating command should not show warning"
+        );
+    }
+
+    #[test]
+    fn test_render_markdown_mutating_blockquote() {
+        let cmd = Command::builder("delete")
+            .summary("Delete a resource")
+            .mutating()
+            .build()
+            .unwrap();
+        let md = render_markdown(&cmd);
+        assert!(
+            md.contains("> ⚠ **Mutating command**"),
+            "markdown should contain mutating blockquote"
+        );
+    }
+
+    #[test]
+    fn test_render_markdown_non_mutating_no_blockquote() {
+        let cmd = Command::builder("list")
+            .summary("List resources")
+            .build()
+            .unwrap();
+        let md = render_markdown(&cmd);
+        assert!(
+            !md.contains("> ⚠ **Mutating command**"),
+            "non-mutating command should not have mutating blockquote"
+        );
+    }
+
+    #[test]
+    fn test_render_json_schema_mutating_flag_in_schema() {
+        let cmd = Command::builder("delete")
+            .summary("Delete a resource")
+            .mutating()
+            .build()
+            .unwrap();
+        let schema = render_json_schema(&cmd).unwrap();
+        let v: serde_json::Value = serde_json::from_str(&schema).unwrap();
+        assert_eq!(
+            v["mutating"],
+            serde_json::json!(true),
+            "JSON schema should include mutating:true"
+        );
+    }
+
+    #[test]
+    fn test_render_json_schema_non_mutating_no_flag() {
+        let cmd = Command::builder("list").build().unwrap();
+        let schema = render_json_schema(&cmd).unwrap();
+        let v: serde_json::Value = serde_json::from_str(&schema).unwrap();
+        assert!(
+            v["mutating"].is_null(),
+            "non-mutating command should not have mutating key in schema"
+        );
     }
 }
